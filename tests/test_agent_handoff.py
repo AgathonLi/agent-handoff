@@ -477,6 +477,28 @@ class TestHostSync(unittest.TestCase):
             self.assertFalse((target / "leftover.md").exists())
             self.assertTrue((target / "_meta.json").exists())
 
+    def test_prune_removes_directories_it_empties(self):
+        """Deleting files alone leaves hollow tests/ and .github/ behind."""
+        with tempfile.TemporaryDirectory() as tmp:
+            target = Path(tmp) / "installed"
+            payload = sync_to_host.collect_payload(REPO_ROOT)
+            actions = sync_to_host.plan(payload, target, prune=False)
+            target.mkdir(parents=True)
+            sync_to_host.apply_plan(payload, target, actions)
+
+            leftover_dir = target / "tests"
+            leftover_dir.mkdir()
+            (leftover_dir / "test_old.py").write_text("# stale\n", encoding="utf-8")
+
+            pruning = sync_to_host.plan(payload, target, prune=True)
+            self.assertIn("tests/test_old.py", pruning["stale"])
+
+            sync_to_host.apply_plan(payload, target, pruning)
+            self.assertFalse(leftover_dir.exists(), "empty tests/ was left behind")
+            # Directories the payload still needs must survive.
+            self.assertTrue((target / "scripts").is_dir())
+            self.assertTrue((target / "references").is_dir())
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

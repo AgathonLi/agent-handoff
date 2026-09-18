@@ -130,11 +130,29 @@ def plan(payload: dict[str, Path], target: Path, prune: bool) -> dict[str, list[
     return actions
 
 
+def _prune_empty_dirs(target: Path) -> list[Path]:
+    """Remove directories left empty by pruning.
+
+    Deleting the files alone leaves hollow directories such as tests/ and
+    .github/workflows/ behind, which makes the installed copy look like it still
+    carries development files.
+    """
+    removed = []
+    for dirpath, dirnames, filenames in os.walk(target, topdown=False):
+        current = Path(dirpath)
+        if current == target:
+            continue
+        if not dirnames and not filenames:
+            current.rmdir()
+            removed.append(current)
+    return removed
+
+
 def apply_plan(
     payload: dict[str, Path],
     target: Path,
     actions: dict[str, list[str]],
-) -> None:
+) -> list[Path]:
     for relative in actions["new"] + actions["changed"]:
         destination = target / relative
         destination.parent.mkdir(parents=True, exist_ok=True)
@@ -142,6 +160,10 @@ def apply_plan(
 
     for relative in actions["stale"]:
         (target / relative).unlink(missing_ok=True)
+
+    if actions["stale"]:
+        return _prune_empty_dirs(target)
+    return []
 
 
 def verify(payload: dict[str, Path], target: Path) -> list[str]:
@@ -218,7 +240,9 @@ def main() -> int:
             continue
 
         target.mkdir(parents=True, exist_ok=True)
-        apply_plan(payload, target, actions)
+        emptied = apply_plan(payload, target, actions)
+        for directory in emptied:
+            print(f"  rmdir     {directory.relative_to(target).as_posix()}")
 
         mismatched = verify(payload, target)
         if mismatched:
