@@ -23,3 +23,6 @@ _skillhub_meta.json
 
 # Handoffs produced while dogfooding this repo on itself.
 .handoff/
+
+# Host-written session memory for this workspace. Local context, not source.
+.workbuddy/
