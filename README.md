@@ -1,5 +1,9 @@
 # agent-handoff
 
+[![tests](https://github.com/AgathonLi/agent-handoff/actions/workflows/test.yml/badge.svg)](https://github.com/AgathonLi/agent-handoff/actions/workflows/test.yml)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+
 Host-neutral session handoff documents for cross-agent development.
 
 Write a handoff in one agent, resume from it in another. Works with Claude Code,
