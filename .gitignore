@@ -1,0 +1,25 @@
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+.venv/
+venv/
+env/
+
+.DS_Store
+Thumbs.db
+desktop.ini
+
+.vscode/
+.idea/
+*.swp
+
+# Skill-host metadata written at install time, not part of the source.
+_meta.json
+_skillhub_meta.json
+
+# Handoffs produced while dogfooding this repo on itself.
+.handoff/
