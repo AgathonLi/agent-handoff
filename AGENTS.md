@@ -33,18 +33,24 @@ python scripts/sync_to_host.py --apply    # 实际写入
 - 路径决策只允许经 `handoff_paths.py` 的五级解析链，禁止在其他脚本里另写路径拼接。
 - 项目根探测失败时**必须**以退出码 2 报错，禁止静默降级写入 cwd。
 - 校验器的章节正则 `#{1,3}` 与章节定界符必须同步修改。只改一处会让子标题截断父节。
-- 改动任何脚本后必须跑 `python tests/test_agent_handoff.py`，28 项需全绿。
-  不要只跑单个测试类就判定通过。
+- 改动任何脚本后必须跑 `python tests/test_agent_handoff.py`，全部用例需全绿。
+  不要只跑单个测试类就判定通过。不要在文档里写死用例数——该数字已漂移过两次，
+  以实际运行输出为准。
 - 不要提交 `.handoff/`（自用交接档案）、`__pycache__/`、`_meta.json`。已在 `.gitignore`。
 - 不要把本机绝对路径写进 `README.md` 或 `SKILL.md`。那些只放在本文件。
 - 远程默认 **public**。未确认不要 force-push、改 remote。
 - 不要把本技能提交回 skillhub 市场——会重新落入版本与审核节奏不受控的位置。
 
-## 已知需要人工决策的事项
+## 仓库归属（已定，勿改）
 
-- `README.md` 三处安装命令的 owner 占位 `github.com/<you>/agent-handoff`，
-  建仓后需替换为真实地址。
-- `LICENSE` 版权行为 `Copyright (c) 2026 Agathon`，对外公开前确认是否保留。
+- 远端：`https://github.com/AgathonLi/agent-handoff`，**public**。
+  public 是刚性选择而非偏好：CI 是 3 OS × 2 Python 的六组合矩阵，
+  private 仓库的 Actions 分钟数有配额，会让 Linux/macOS 覆盖变成消耗品。
+- `README.md` 安装命令中的 owner 共 **4 处**（standalone 用法那段易漏），
+  改地址时按 4 处核对。
+- `LICENSE` 版权行为 `Copyright (c) 2026 AgathonLi`，与远端 owner 一致。
+- 提交身份 `Agathon` + `96290465+AgathonLi@users.noreply.github.com`，
+  仅 local 配置，全局未设，克隆到新机需重配。
 
 ## 冲突处理
 

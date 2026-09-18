@@ -27,19 +27,19 @@ Clone into your agent's skills directory:
 
 ```bash
 # Claude Code
-git clone https://github.com/<you>/agent-handoff ~/.claude/skills/agent-handoff
+git clone https://github.com/AgathonLi/agent-handoff ~/.claude/skills/agent-handoff
 
 # WorkBuddy
-git clone https://github.com/<you>/agent-handoff ~/.workbuddy/skills/agent-handoff
+git clone https://github.com/AgathonLi/agent-handoff ~/.workbuddy/skills/agent-handoff
 
 # OpenCode / Codex (agent-compatible path)
-git clone https://github.com/<you>/agent-handoff ~/.agents/skills/agent-handoff
+git clone https://github.com/AgathonLi/agent-handoff ~/.agents/skills/agent-handoff
 ```
 
 Or use the scripts standalone, with no skill host at all:
 
 ```bash
-git clone https://github.com/<you>/agent-handoff
+git clone https://github.com/AgathonLi/agent-handoff
 python agent-handoff/scripts/create_handoff.py my-task
 ```
 
@@ -178,7 +178,7 @@ actually reachable from another agent.
 python tests/test_agent_handoff.py
 ```
 
-34 tests, no third-party dependencies. CI runs them on Linux, Windows and macOS
+No third-party dependencies. CI runs the suite on Linux, Windows and macOS
 against Python 3.10 and 3.13.
 
 If you develop in a clone and also keep installed copies under
