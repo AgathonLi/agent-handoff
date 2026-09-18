@@ -25,6 +25,14 @@ python scripts/sync_to_host.py            # 预演，只打印将要发生的变
 python scripts/sync_to_host.py --apply    # 实际写入
 ```
 
+### 副本里的 `_user_meta.json` 是宿主台账，不要删
+
+WorkBuddy 的「已安装技能」界面按 sidecar 文件列举，不扫目录。本技能是同步进去的、
+没走过 GUI 安装流程，因此需要手写这个文件，否则**技能能用但 GUI 里看不见**。
+
+它只存在于副本、不在源仓，所以必须留在 `sync_to_host.py` 的 `HOST_OWNED_NAMES` 里，
+否则下次 `--prune` 会把它当 stale 删掉，GUI 条目随之消失、问题复发。
+
 ## 刚性红线
 
 - 交接目录**必须**保持宿主中立。默认 `.handoff/`。禁止把默认值改成

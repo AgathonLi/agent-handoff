@@ -62,9 +62,18 @@ EXCLUDED_NAMES = {
 
 # Files the host writes at install time. Present in the target, absent from the
 # repository; --prune must not treat them as stale.
+#
+# A host may keep its installed-skill inventory in a sidecar file rather than by
+# scanning directories. A skill copied in by this script never goes through the
+# host's own install flow, so that file is missing and the skill can run yet not
+# appear in the host's skill list. Writing the sidecar by hand fixes the listing,
+# but only if --prune leaves it alone: it is absent from the repository and would
+# otherwise be deleted as stale on the next sync, making the fix look flaky.
 HOST_OWNED_NAMES = {
     "_meta.json",
     "_skillhub_meta.json",
+    "_user_meta.json",
+    "workbuddy.json",
 }
 
 

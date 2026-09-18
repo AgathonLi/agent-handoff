@@ -69,6 +69,22 @@ python scripts/check_staleness.py .handoff/2026-09-18-120000-auth.md
 所有脚本都接受 `--handoff-dir` 和 `--project-root`。`validate_handoff.py`、
 `list_handoffs.py` 和 `check_staleness.py` 另外接受 `--json`。
 
+## 让 agent 代劳
+
+在按描述匹配技能的宿主上，下列说法可以直接唤起本技能，不必指明脚本：
+
+| 意图 | 说法 |
+|------|------|
+| 写一份 | `create handoff`、`save state`、`I need to pause`、`context is getting full`；中文：创建交接、保存状态、我要暂停一下、上下文快满了 |
+| 转交出去 | `hand this to Codex`、`take this to another agent`；中文：转给 Codex、交给另一个 agent |
+| 接手 | `load handoff`、`resume from`、`continue where we left off`；中文：加载交接、从上次继续、接着上回的进度 |
+
+单独一个 `handoff` 或「交接」不足以判断意图——是要写、要读，还是只是在谈论这
+件事，说不清楚。配一个动词。
+
+这些说法只是便利，不是接口。脚本才是接口；遇到不按描述匹配的 agent，直接让它
+调用脚本即可。
+
 ## 目录解析
 
 首个命中生效。各级之间互不依赖。

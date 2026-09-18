@@ -518,6 +518,22 @@ class TestHostSync(unittest.TestCase):
             self.assertEqual(again["changed"], [])
 
     def test_prune_spares_host_written_metadata(self):
+        """Every host-owned sidecar survives a prune, not just the first one.
+
+        These files record the skill in the host's installed-skill inventory. A
+        skill synced in by this script never runs the host's install flow, so
+        the sidecar has to be written by hand; deleting it as stale would drop
+        the skill out of the host's listing again after the next sync.
+        """
+        # Named literally rather than read from HOST_OWNED_NAMES: a test that
+        # derives its expectations from the implementation cannot detect a
+        # missing entry, because the omission disappears from both sides at once.
+        required = {"_meta.json", "_skillhub_meta.json", "_user_meta.json"}
+        self.assertTrue(
+            required <= sync_to_host.HOST_OWNED_NAMES,
+            f"host-owned sidecars not registered: {sorted(required - sync_to_host.HOST_OWNED_NAMES)}",
+        )
+
         with tempfile.TemporaryDirectory() as tmp:
             target = Path(tmp) / "installed"
             payload = sync_to_host.collect_payload(REPO_ROOT)
@@ -525,16 +541,22 @@ class TestHostSync(unittest.TestCase):
             target.mkdir(parents=True)
             sync_to_host.apply_plan(payload, target, actions)
 
-            (target / "_meta.json").write_text("{}", encoding="utf-8")
+            for name in sync_to_host.HOST_OWNED_NAMES:
+                (target / name).write_text("{}", encoding="utf-8")
             (target / "leftover.md").write_text("stale\n", encoding="utf-8")
 
             pruning = sync_to_host.plan(payload, target, prune=True)
             self.assertIn("leftover.md", pruning["stale"])
-            self.assertNotIn("_meta.json", pruning["stale"])
+            for name in sync_to_host.HOST_OWNED_NAMES:
+                self.assertNotIn(name, pruning["stale"])
 
             sync_to_host.apply_plan(payload, target, pruning)
             self.assertFalse((target / "leftover.md").exists())
-            self.assertTrue((target / "_meta.json").exists())
+            for name in sync_to_host.HOST_OWNED_NAMES:
+                self.assertTrue(
+                    (target / name).exists(),
+                    f"host-owned {name} was deleted by prune",
+                )
 
     def test_prune_removes_directories_it_empties(self):
         """Deleting files alone leaves hollow tests/ and .github/ behind."""

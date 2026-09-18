@@ -73,6 +73,24 @@ python scripts/check_staleness.py .handoff/2026-09-18-120000-auth.md
 Every script accepts `--handoff-dir` and `--project-root`. `validate_handoff.py`,
 `list_handoffs.py` and `check_staleness.py` also accept `--json`.
 
+## Asking an agent instead
+
+On hosts that match skills by description, the phrases below load this skill
+without naming a script:
+
+| Intent | Phrases |
+|--------|---------|
+| Write one | `create handoff`, `save state`, `I need to pause`, `context is getting full` |
+| Pass it on | `hand this to Codex`, `take this to another agent` |
+| Pick it up | `load handoff`, `resume from`, `continue where we left off` |
+
+The word `handoff` on its own is ambiguous — it does not say whether to write
+one, read one, or merely discuss the idea. Pair it with a verb.
+
+These phrases are a convenience, not the interface. The scripts are the
+interface, and an agent that does not match on description can always be
+pointed at them directly.
+
 ## Directory resolution
 
 First match wins. Each level works independently of the ones above it.
