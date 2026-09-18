@@ -427,6 +427,7 @@ class TestHostSync(unittest.TestCase):
             ".gitignore",
             "LICENSE",
             "README.md",
+            "README.zh-CN.md",
             "SKILL.md",
             "references",
             "scripts",
@@ -442,11 +443,27 @@ class TestHostSync(unittest.TestCase):
             "skill genuinely needs them at runtime.",
         )
 
+    def test_both_readme_languages_ship_together(self):
+        """Each README links to the other, so shipping one alone breaks the link.
+
+        An installed copy carrying only README.md would render a "简体中文"
+        link that resolves to nothing.
+        """
+        payload = sync_to_host.collect_payload(REPO_ROOT)
+        self.assertIn("README.md", payload)
+        self.assertIn("README.zh-CN.md", payload)
+
+        english = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
+        chinese = (REPO_ROOT / "README.zh-CN.md").read_text(encoding="utf-8")
+        self.assertIn("README.zh-CN.md", english, "English README lost its switcher")
+        self.assertIn("(README.md)", chinese, "Chinese README lost its switcher")
+
     def test_includes_everything_the_skill_needs_at_runtime(self):
         payload = sync_to_host.collect_payload(REPO_ROOT)
         required = [
             "SKILL.md",
             "README.md",
+            "README.zh-CN.md",
             "LICENSE",
             "scripts/handoff_paths.py",
             "scripts/create_handoff.py",

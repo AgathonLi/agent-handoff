@@ -4,6 +4,8 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
+**English** · [简体中文](README.zh-CN.md)
+
 Host-neutral session handoff documents for cross-agent development.
 
 Write a handoff in one agent, resume from it in another. Works with Claude Code,
@@ -194,10 +196,15 @@ python scripts/sync_to_host.py            # dry run
 python scripts/sync_to_host.py --apply
 ```
 
-The sync is one-way and withholds `AGENTS.md`, `tests/`, `.github/` and itself.
-Withholding `AGENTS.md` is a correctness requirement rather than housekeeping:
-it is a project-root marker, so an installed copy containing it would register as
-a project root and receive handoff files instead of raising an error.
+The sync is one-way and withholds `AGENTS.md`, `tests/`, `.github/`, itself, and
+host-written local directories such as `.handoff/` and `.workbuddy/`. Withholding
+`AGENTS.md` is a correctness requirement rather than housekeeping: it is a
+project-root marker, so an installed copy containing it would register as a
+project root and receive handoff files instead of raising an error.
+
+The payload is also constrained by an allowlist test rather than by the exclusion
+set alone, so a newly added local directory fails the suite instead of silently
+shipping to every installed copy.
 
 ## Relationship to prior work
 
