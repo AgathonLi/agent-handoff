@@ -455,8 +455,22 @@ class TestHostSync(unittest.TestCase):
 
         english = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
         chinese = (REPO_ROOT / "README.zh-CN.md").read_text(encoding="utf-8")
-        self.assertIn("README.zh-CN.md", english, "English README lost its switcher")
-        self.assertIn("(README.md)", chinese, "Chinese README lost its switcher")
+
+        # Assert that each file links to the other, without pinning the markup.
+        # The switcher is an HTML block so it can be right-aligned, which
+        # Markdown link syntax cannot express; checking for a literal
+        # "[text](target)" would make a purely visual change fail the suite.
+        def links_to(document: str, target: str) -> bool:
+            return f"]({target})" in document or f'href="{target}"' in document
+
+        for source, target in (
+            (english, "./README.zh-CN.md"),
+            (chinese, "./README.md"),
+        ):
+            self.assertTrue(
+                links_to(source, target) or links_to(source, target[2:]),
+                f"a README no longer links to {target}",
+            )
 
     def test_includes_everything_the_skill_needs_at_runtime(self):
         payload = sync_to_host.collect_payload(REPO_ROOT)

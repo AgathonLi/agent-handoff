@@ -1,10 +1,12 @@
+<p align="right">
+   <a href="./README.md">EN</a> | <strong>简</strong>
+</p>
+
 # agent-handoff
 
 [![tests](https://github.com/AgathonLi/agent-handoff/actions/workflows/test.yml/badge.svg)](https://github.com/AgathonLi/agent-handoff/actions/workflows/test.yml)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
-
-**简体中文** · [English](README.md)
 
 宿主中立的会话交接文档，用于跨 agent 开发。
 
