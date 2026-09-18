@@ -414,6 +414,34 @@ class TestHostSync(unittest.TestCase):
         self.assertNotIn("scripts/sync_to_host.py", payload)
         self.assertNotIn(".gitattributes", payload)
 
+    def test_payload_is_an_allowlist_not_a_blocklist(self):
+        """Any new top-level entry must be opted in, never opted out.
+
+        EXCLUDED_NAMES enumerates what to withhold, so a newly added local
+        directory -- host session memory, a scratch dir, an editor workspace --
+        silently ships to every installed copy until someone remembers to add
+        it. That already happened once with .workbuddy/. Pinning the permitted
+        set turns the next occurrence into a test failure instead of a leak.
+        """
+        permitted_top_level = {
+            ".gitignore",
+            "LICENSE",
+            "README.md",
+            "SKILL.md",
+            "references",
+            "scripts",
+        }
+        payload = sync_to_host.collect_payload(REPO_ROOT)
+        actual_top_level = {relative.split("/", 1)[0] for relative in payload}
+        unexpected = actual_top_level - permitted_top_level
+        self.assertEqual(
+            set(),
+            unexpected,
+            f"unapproved entries reached the sync payload: {sorted(unexpected)}. "
+            "Add them to EXCLUDED_NAMES, or to this allowlist if the installed "
+            "skill genuinely needs them at runtime.",
+        )
+
     def test_includes_everything_the_skill_needs_at_runtime(self):
         payload = sync_to_host.collect_payload(REPO_ROOT)
         required = [
@@ -498,6 +526,64 @@ class TestHostSync(unittest.TestCase):
             # Directories the payload still needs must survive.
             self.assertTrue((target / "scripts").is_dir())
             self.assertTrue((target / "references").is_dir())
+
+    def test_prune_collapses_nested_empty_directories(self):
+        """One bottom-up sweep strips only a single level per nesting depth.
+
+        os.walk fixes a directory's child list when it first visits the parent,
+        so removing a/b/ during a pass leaves a/ still looking non-empty in that
+        same pass. Observed with .workbuddy/memory/: the file and memory/ went,
+        while .workbuddy/ survived and the copy still looked contaminated.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            target = Path(tmp) / "installed"
+            payload = sync_to_host.collect_payload(REPO_ROOT)
+            actions = sync_to_host.plan(payload, target, prune=False)
+            target.mkdir(parents=True)
+            sync_to_host.apply_plan(payload, target, actions)
+
+            deep = target / "leaked" / "level2" / "level3"
+            deep.mkdir(parents=True)
+            (deep / "note.md").write_text("stale\n", encoding="utf-8")
+
+            pruning = sync_to_host.plan(payload, target, prune=True)
+            self.assertIn("leaked/level2/level3/note.md", pruning["stale"])
+
+            sync_to_host.apply_plan(payload, target, pruning)
+            self.assertFalse(
+                (target / "leaked").exists(),
+                "nested empty directories were not collapsed to the top",
+            )
+            self.assertTrue((target / "scripts").is_dir())
+
+    def test_prune_cleans_a_copy_whose_only_flaw_is_an_empty_dir(self):
+        """An already-hollow directory yields no stale entries to key off.
+
+        Cleanup used to run only when stale was non-empty, so a copy already in
+        file-level sync reported "already in sync" and the directory survived
+        every subsequent run. _find_empty_dirs makes the hollow directory itself
+        a unit of pending work.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            target = Path(tmp) / "installed"
+            payload = sync_to_host.collect_payload(REPO_ROOT)
+            actions = sync_to_host.plan(payload, target, prune=False)
+            target.mkdir(parents=True)
+            sync_to_host.apply_plan(payload, target, actions)
+
+            (target / "hollow" / "deeper").mkdir(parents=True)
+
+            pruning = sync_to_host.plan(payload, target, prune=True)
+            self.assertEqual(pruning["stale"], [], "an empty dir holds no files")
+            self.assertEqual(
+                [d.name for d in sync_to_host._find_empty_dirs(target)],
+                ["hollow"],
+                "the hollow directory must be reported as pending work",
+            )
+
+            sync_to_host.apply_plan(payload, target, pruning, prune=True)
+            self.assertFalse((target / "hollow").exists())
+            self.assertEqual(sync_to_host.verify(payload, target), [])
 
 
 if __name__ == "__main__":

@@ -206,10 +206,15 @@ staleness also accept `--json` for programmatic use.
 
 `sync_to_host.py` exists only in the development repository and is not part of an
 installed copy. It pushes the repository to the host skill directories and
-deliberately withholds `AGENTS.md`, `tests/` and `.github/`: `AGENTS.md` is a
-project-root marker, so copying it into an installed skill directory would make
-that directory look like a project root and send handoff files there instead of
+deliberately withholds `AGENTS.md`, `tests/`, `.github/` and host-written local
+directories such as `.handoff/` and `.workbuddy/`. `AGENTS.md` is a project-root
+marker, so copying it into an installed skill directory would make that
+directory look like a project root and send handoff files there instead of
 raising an error.
+
+The payload is constrained by an allowlist test rather than only by the
+exclusion set, so a newly added local directory fails the suite instead of
+silently shipping to every installed copy.
 
 ### references/
 

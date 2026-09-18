@@ -53,6 +53,7 @@ EXCLUDED_NAMES = {
     ".github",
     ".gitattributes",
     ".handoff",
+    ".workbuddy",
     "__pycache__",
     "AGENTS.md",
     "tests",
@@ -130,29 +131,69 @@ def plan(payload: dict[str, Path], target: Path, prune: bool) -> dict[str, list[
     return actions
 
 
+def _find_empty_dirs(target: Path) -> list[Path]:
+    """Report directories that hold no files at any depth, without deleting.
+
+    Used to decide whether a prune pass has work to do. A directory containing
+    only other empty directories counts as empty, since the whole chain would
+    be removed.
+    """
+    if not target.exists():
+        return []
+    hollow = []
+    for dirpath, _dirnames, _filenames in os.walk(target):
+        current = Path(dirpath)
+        if current == target:
+            continue
+        if not any(p.is_file() for p in current.rglob("*")):
+            hollow.append(current)
+    # Keep only the topmost of each chain; children are implied.
+    return [d for d in hollow if d.parent not in hollow]
+
+
 def _prune_empty_dirs(target: Path) -> list[Path]:
     """Remove directories left empty by pruning.
 
     Deleting the files alone leaves hollow directories such as tests/ and
     .github/workflows/ behind, which makes the installed copy look like it still
     carries development files.
+
+    Nesting requires repeated passes. os.walk fixes each directory's child list
+    when it first visits the parent, so removing a/b/ during a pass still leaves
+    a/ looking non-empty in that same pass. A single bottom-up sweep therefore
+    strips exactly one level per nesting depth. Looping until a pass removes
+    nothing collapses the whole chain.
     """
     removed = []
-    for dirpath, dirnames, filenames in os.walk(target, topdown=False):
-        current = Path(dirpath)
-        if current == target:
-            continue
-        if not dirnames and not filenames:
-            current.rmdir()
-            removed.append(current)
-    return removed
+    while True:
+        removed_this_pass = []
+        for dirpath, _dirnames, _filenames in os.walk(target, topdown=False):
+            current = Path(dirpath)
+            if current == target:
+                continue
+            if not any(current.iterdir()):
+                current.rmdir()
+                removed_this_pass.append(current)
+        if not removed_this_pass:
+            return removed
+        removed.extend(removed_this_pass)
 
 
 def apply_plan(
     payload: dict[str, Path],
     target: Path,
     actions: dict[str, list[str]],
+    prune: bool | None = None,
 ) -> list[Path]:
+    """Write the plan. Returns directories removed for being empty.
+
+    prune defaults to "whatever the plan implies" so existing three-argument
+    callers keep their behaviour; pass it explicitly to clean a copy whose only
+    contamination is a hollow directory.
+    """
+    if prune is None:
+        prune = bool(actions["stale"])
+
     for relative in actions["new"] + actions["changed"]:
         destination = target / relative
         destination.parent.mkdir(parents=True, exist_ok=True)
@@ -161,7 +202,10 @@ def apply_plan(
     for relative in actions["stale"]:
         (target / relative).unlink(missing_ok=True)
 
-    if actions["stale"]:
+    # Gated on prune rather than on stale being non-empty: a directory that is
+    # already hollow produces no stale entries, so keying off stale would skip
+    # the very case that needs cleaning.
+    if prune:
         return _prune_empty_dirs(target)
     return []
 
@@ -231,18 +275,29 @@ def main() -> int:
         print(f"  unchanged {len(actions['unchanged'])} file(s)")
 
         pending = actions["new"] + actions["changed"] + actions["stale"]
-        if not pending:
+
+        # An empty directory holds no files, so it never appears in "stale".
+        # Without this, a copy whose only contamination is a hollow directory
+        # reports "already in sync" and the prune pass is skipped entirely --
+        # the directory then survives every subsequent run.
+        hollow = _find_empty_dirs(target) if args.prune else []
+
+        if not pending and not hollow:
             print("  already in sync")
             continue
 
         if not args.apply:
-            print(f"  {len(pending)} change(s) pending; re-run with --apply")
+            for directory in hollow:
+                print(f"  empty     {directory.relative_to(target).as_posix()}")
+            total = len(pending) + len(hollow)
+            print(f"  {total} change(s) pending; re-run with --apply")
             continue
 
         target.mkdir(parents=True, exist_ok=True)
-        emptied = apply_plan(payload, target, actions)
+        emptied = apply_plan(payload, target, actions, prune=args.prune)
         for directory in emptied:
             print(f"  rmdir     {directory.relative_to(target).as_posix()}")
+        pending = pending + [d.as_posix() for d in hollow]
 
         mismatched = verify(payload, target)
         if mismatched:
