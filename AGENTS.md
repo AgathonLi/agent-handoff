@@ -52,6 +52,17 @@ python scripts/sync_to_host.py --apply    # 实际写入
 - 提交身份 `Agathon` + `96290465+AgathonLi@users.noreply.github.com`，
   仅 local 配置，全局未设，克隆到新机需重配。
 
+## 本机环境陷阱：`origin/main [gone]` 是噪声
+
+本机沙箱会**静默拦截 git 对 `refs/remotes/` 的写入**：`fetch` / `update-ref`
+均返回退出码 0 并打印成功信息，但引用不落盘。因此 `git status -sb` 恒显示
+`## main...origin/main [gone]`，`git rev-parse origin/main` 必然失败。
+
+这不是仓库损坏，不要试图"修复"，也不要据此判断推送失败。
+核实远端状态用 `git ls-remote origin` 比对 SHA，或查 GitHub API。
+
+同类陷阱参见 Git Bash 下 `find` 被解析到系统 `FIND.exe`：**退出码 0 不等于操作生效**。
+
 ## 冲突处理
 
 本文件只做自动注入指针。与 `SKILL.md` / `README.md` / `LICENSE` 冲突时，以后者为准，
