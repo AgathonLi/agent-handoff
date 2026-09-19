@@ -103,6 +103,30 @@ credentials, referenced files resolve, quality score 0-100.
 
 Do not finalize a handoff with secrets detected or a score below 70.
 
+#### Paths outside the project trip the file-reference check
+
+The file-reference check resolves every backtick-quoted path against the project
+root. A path that lives outside the project — a language runtime, a sibling
+repository, an installed skill copy — therefore reports as "not found" and costs
+score, even though nothing is wrong.
+
+Describe such locations in prose and point at wherever the project already
+records machine-specific paths, rather than quoting the path itself:
+
+```markdown
+Python 3.13.12 (managed; path recorded in `AGENTS.md`)
+```
+
+Not:
+
+```markdown
+Python 3.13.12 at `.workbuddy/binaries/python/versions/3.13.12/python.exe`
+```
+
+If the pointer is to another file, confirm that file actually carries the path.
+A handoff that defers to `AGENTS.md` for a path `AGENTS.md` never recorded is a
+dangling pointer that validation cannot catch.
+
 ### Step 4: confirm
 
 Report the file location, score, any warnings, and the first action item for the
