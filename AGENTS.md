@@ -10,6 +10,15 @@
 4. `tests/test_agent_handoff.py` — 已锁定的行为，改实现前先读测试
 5. 重新核对目录内实际文件，不要只信交接文本
 
+## Handoffs 与评审存档
+
+- 会话交接档案在 `.handoff/`（宿主中立，本仓无 `.handoffrc`，解析实测
+  `Resolved via: existing directory (.handoff)`）。开工读最新一份，收工写一份新的。
+- 使用回顾与评估文档在 `reviews/`，随仓库提交、面向人审阅；`reviews` 已在
+  `sync_to_host.py` 的 `EXCLUDED_NAMES` 中登记，不会进安装副本。
+- **新增任何顶层目录都必须同步登记进 `EXCLUDED_NAMES`**：同步白名单是 allowlist，
+  未登记的目录会让 `test_payload_is_an_allowlist_not_a_blocklist` 直接失败。
+
 ## 本仓是源，安装位置是副本
 
 - **源**：本目录 `D:\AI_Workspace\Agathon\Agent Handoff Skill`

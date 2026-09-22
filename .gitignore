@@ -26,3 +26,7 @@ _skillhub_meta.json
 
 # Host-written session memory for this workspace. Local context, not source.
 .workbuddy/
+
+# Usage reviews. Local development notes about other projects; this
+# repository is public, so they must not be committed.
+reviews/

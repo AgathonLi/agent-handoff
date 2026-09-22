@@ -56,6 +56,10 @@ EXCLUDED_NAMES = {
     ".workbuddy",
     "__pycache__",
     "AGENTS.md",
+    # Usage reviews and other write-ups about this skill. Development output,
+    # not something an installed copy needs at runtime; the allowlist test in
+    # tests/ would reject the directory if it reached the payload.
+    "reviews",
     "tests",
     "sync_to_host.py",
 }
