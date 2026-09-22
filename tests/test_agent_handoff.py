@@ -6,8 +6,9 @@ Covers the behaviour that distinguishes this implementation: the five-level
 directory resolution chain, marker-based project root detection, refusal to
 write when no root exists, heading levels 1-3 acceptance, level-4 sub-headings
 not truncating their parent section, correct file-reference base path at
-arbitrary handoff directory depth, credential blocking, and the non-git
-staleness fallback.
+arbitrary handoff directory depth, the `(planned)` exemption for references
+that do not exist yet, credential blocking, freshness of the newest handoff in
+the listing, and the non-git staleness fallback.
 
 Also covers the repository -> installed-copy sync, whose exclusion list is a
 correctness constraint: copying AGENTS.md into an installed copy would turn that
@@ -315,6 +316,45 @@ class TestValidation(unittest.TestCase):
             result = run_script("validate_handoff.py", str(doc), cwd=root)
             self.assertNotIn("referenced file(s) not found", result.stdout)
 
+    def test_planned_marker_is_not_deducted(self):
+        """A backtick path followed by `(planned)` is declared, not missing.
+
+        Plans cite files that do not exist yet. Treating every such citation as
+        a wrong path was the most common deduction. The marker is a separate
+        backtick span placed immediately after the path.
+        """
+        body = (
+            self._complete_doc()
+            + "\nNext session creates `src/auth/session.py` `(planned)`.\n"
+        )
+        with TempProject() as root:
+            doc = self._write(root, body)
+            result = run_script("validate_handoff.py", str(doc), cwd=root)
+            self.assertNotIn("referenced file(s) not found", result.stdout)
+            self.assertNotIn("src/auth/session.py", result.stdout)
+            self.assertEqual(result.returncode, 0)
+
+    def test_unmarked_missing_reference_is_still_deducted(self):
+        """Without the marker, a missing path is still a wrong path."""
+        body = self._complete_doc() + "\nSee `src/auth/session.py` for the plan.\n"
+        with TempProject() as root:
+            doc = self._write(root, body)
+            result = run_script("validate_handoff.py", str(doc), cwd=root)
+            self.assertIn("src/auth/session.py", result.stdout)
+            self.assertIn("referenced file(s) not found", result.stdout)
+
+    def test_planned_marker_outside_backticks_does_not_count(self):
+        """`(planned)` written as prose exempts nothing."""
+        body = (
+            self._complete_doc()
+            + "\nSee `src/auth/session.py` (planned) once it exists.\n"
+        )
+        with TempProject() as root:
+            doc = self._write(root, body)
+            result = run_script("validate_handoff.py", str(doc), cwd=root)
+            self.assertIn("src/auth/session.py", result.stdout)
+            self.assertIn("referenced file(s) not found", result.stdout)
+
     def test_complete_document_scores_full_marks(self):
         with TempProject() as root:
             run_script("create_handoff.py", "scored", cwd=root)
@@ -354,6 +394,49 @@ class TestListing(unittest.TestCase):
             payload = json.loads(result.stdout)
             self.assertEqual(payload["count"], 1)
             self.assertIn("resolved_via", payload)
+            self.assertIn(payload["handoffs"][0]["freshness"], ("FRESH", "unknown"))
+
+    def test_newest_handoff_carries_freshness(self):
+        """Only the most recent handoff is assessed, and a real verdict shows."""
+        with TempProject() as root:
+            run_script("create_handoff.py", "older", cwd=root)
+            run_script("create_handoff.py", "newer", cwd=root)
+            result = run_script("list_handoffs.py", cwd=root)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(result.stdout.count("Freshness:"), 1)
+            self.assertIn("Freshness: FRESH", result.stdout)
+
+    def test_freshness_failure_does_not_fail_the_listing(self):
+        """A broken staleness check degrades to "unknown", listing still exits 0."""
+        import list_handoffs
+
+        with TempProject() as root:
+            run_script("create_handoff.py", "fragile", cwd=root)
+            doc = next((root / ".handoff").glob("*.md"))
+
+            def explode(*_args, **_kwargs):
+                raise RuntimeError("staleness unavailable")
+
+            original = list_handoffs.check_staleness
+            list_handoffs.check_staleness = explode
+            try:
+                self.assertEqual(list_handoffs.freshness_of(str(doc), root), "unknown")
+            finally:
+                list_handoffs.check_staleness = original
+
+    def test_needs_work_prints_a_removal_hint(self):
+        """An unfilled scaffold is listed with the command that removes it.
+
+        The hint is text only. The script must not delete the file.
+        """
+        with TempProject() as root:
+            run_script("create_handoff.py", "abandoned", cwd=root)
+            doc = next((root / ".handoff").glob("*.md"))
+            result = run_script("list_handoffs.py", cwd=root)
+            self.assertIn("Needs work", result.stdout)
+            self.assertIn("Unfilled scaffold", result.stdout)
+            self.assertIn(f'rm "{doc}"', result.stdout)
+            self.assertTrue(doc.exists())
 
 
 class TestStaleness(unittest.TestCase):

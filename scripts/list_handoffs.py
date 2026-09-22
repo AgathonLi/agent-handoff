@@ -4,6 +4,9 @@ List handoff documents available in a project.
 
 Displays date, title, completion status and size for each handoff, newest
 first, and reports which precedence level resolved the handoff directory.
+The newest handoff also gets a Freshness line from check_staleness; a failure
+of that assessment prints "unknown" and does not fail the listing. Handoffs
+still full of TODO markers are marked Needs work and get a removal hint.
 
 Usage:
     python list_handoffs.py [options]
@@ -30,6 +33,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+from check_staleness import check_staleness  # noqa: E402
 from handoff_paths import (  # noqa: E402
     ProjectRootNotFound,
     add_common_args,
@@ -82,6 +86,23 @@ def parse_date_from_filename(filename: str) -> datetime | None:
         return None
 
 
+def freshness_of(filepath: str, project_root: Path) -> str:
+    """Assess one handoff, never raising into the caller.
+
+    The listing reports freshness for the newest handoff only. A failure here
+    must not take the listing down with it: the line then reads "unknown" and
+    the caller continues.
+    """
+    try:
+        result = check_staleness(filepath, str(project_root))
+    except Exception:
+        return "unknown"
+    level = result.get("staleness_level")
+    if not level or "error" in result:
+        return "unknown"
+    return level
+
+
 def collect_handoffs(handoff_dir: Path) -> list[dict]:
     """Gather handoff metadata from the directory, newest first."""
     if not handoff_dir.is_dir():
@@ -132,6 +153,8 @@ def main() -> int:
         return 2
 
     handoffs = collect_handoffs(handoff_dir)
+    if handoffs:
+        handoffs[0]["freshness"] = freshness_of(handoffs[0]["path"], project_root)
 
     if args.as_json:
         print(
@@ -160,15 +183,33 @@ def main() -> int:
 
     print(f"Found {len(handoffs)} handoff(s)\n")
     print("-" * 78)
-    for h in handoffs:
+    for index, h in enumerate(handoffs):
         print(f"  Date:   {format_date(h['date'])}")
         print(f"  Title:  {h['title']}")
         print(f"  Status: {h['status']}")
+        if index == 0:
+            print(f"  Freshness: {h['freshness']}")
         print(f"  File:   {h['filename']}")
         print("-" * 78)
 
     print(f"\nMost recent: {handoffs[0]['path']}")
-    print("Check freshness with: python check_staleness.py <file>")
+    if handoffs[0]["freshness"] == "unknown":
+        print(
+            "Freshness of the most recent handoff could not be assessed. "
+            "Run: python check_staleness.py <file>"
+        )
+    else:
+        print(
+            "Freshness above covers the most recent handoff only. "
+            "For any older file run: python check_staleness.py <file>"
+        )
+    for h in handoffs:
+        if h["status"].startswith("Needs work"):
+            print(f"\nUnfilled scaffold: {h['path']}")
+            print(
+                "If it will not be completed, remove it: "
+                f'rm "{h["path"]}"'
+            )
     return 0
 
 

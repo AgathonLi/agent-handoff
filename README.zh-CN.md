@@ -158,6 +158,9 @@ handoff_dir = docs/handoffs
 
 **检出密钥的交接一律判定 BLOCKED，与分数无关。**
 
+反引号引用的路径，若紧跟另一个独立的 `` `(planned)` `` 跨度，则跳过、不扣分。
+这是计划文档引用尚未创建文件的方式；写在反引号之外的 `(planned)` 不豁免任何引用。
+
 ## 新鲜度
 
 `check_staleness.py` 返回 `FRESH`、`SLIGHTLY_STALE`、`STALE` 或 `VERY_STALE`，

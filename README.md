@@ -169,6 +169,10 @@ formats for AWS, GitHub, OpenAI, Anthropic, Google and Slack.
 
 A handoff with secrets detected is BLOCKED regardless of score.
 
+A backtick-quoted path immediately followed by a separate `` `(planned)` `` span
+is skipped rather than deducted. The marker is how a plan cites a file that does
+not exist yet; `(planned)` written outside backticks exempts nothing.
+
 ## Staleness
 
 `check_staleness.py` returns `FRESH`, `SLIGHTLY_STALE`, `STALE` or `VERY_STALE`

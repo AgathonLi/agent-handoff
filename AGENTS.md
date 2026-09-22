@@ -14,8 +14,9 @@
 
 - 会话交接档案在 `.handoff/`（宿主中立，本仓无 `.handoffrc`，解析实测
   `Resolved via: existing directory (.handoff)`）。开工读最新一份，收工写一份新的。
-- 使用回顾与评估文档在 `reviews/`，随仓库提交、面向人审阅；`reviews` 已在
-  `sync_to_host.py` 的 `EXCLUDED_NAMES` 中登记，不会进安装副本。
+- 使用回顾与评估文档在 `reviews/`，只留在本机。本仓是 public，这类文档点名
+  其他项目，**不要提交**。目录已在 `.gitignore`；同时在 `sync_to_host.py` 的
+  `EXCLUDED_NAMES` 中登记，安装副本也不会带上它。
 - **新增任何顶层目录都必须同步登记进 `EXCLUDED_NAMES`**：同步白名单是 allowlist，
   未登记的目录会让 `test_payload_is_an_allowlist_not_a_blocklist` 直接失败。
 
@@ -53,7 +54,8 @@ WorkBuddy 的「已安装技能」界面按 sidecar 文件列举，不扫目录�
 - 改动任何脚本后必须跑 `python tests/test_agent_handoff.py`，全部用例需全绿。
   不要只跑单个测试类就判定通过。不要在文档里写死用例数——该数字已漂移过两次，
   以实际运行输出为准。
-- 不要提交 `.handoff/`（自用交接档案）、`__pycache__/`、`_meta.json`。已在 `.gitignore`。
+- 不要提交 `.handoff/`（自用交接档案）、`reviews/`（使用回顾）、`__pycache__/`、
+  `_meta.json`。已在 `.gitignore`。
 - 不要把本机绝对路径写进 `README.md` 或 `SKILL.md`。那些只放在本文件。
 - 远程默认 **public**。未确认不要 force-push、改 remote。
 - 不要把本技能提交回 skillhub 市场——会重新落入版本与审核节奏不受控的位置。

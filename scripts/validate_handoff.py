@@ -8,6 +8,7 @@ Checks performed:
     - Recommended sections present
     - No credentials detected
     - Referenced files resolve against the real project root
+    - A backtick path immediately followed by `(planned)` is skipped
     - Composite quality score (0-100)
 
 Usage:
@@ -171,14 +172,42 @@ def resolve_base_path(handoff_file: Path, override: str | None) -> tuple[Path, s
         return handoff_file.parent.resolve(), "fallback: handoff file directory"
 
 
+# A planned reference is a backtick-quoted path whose very next backtick span
+# is "(planned)". The marker must be its own span: "(planned)" written in
+# prose, or attached to a different reference, does not exempt anything.
+PLANNED_REFERENCE = re.compile(
+    r"`([a-zA-Z0-9_\-./]+\.[a-zA-Z]+(?::\d+)?)`"
+    r"\s*"
+    r"`\(planned\)`"
+)
+
+
+def planned_references(content: str) -> set[str]:
+    """Return paths explicitly marked as not yet created.
+
+    Only backtick references can carry the marker. A path mentioned solely in a
+    table cell has no way to mark it planned, and is always verified.
+    """
+    planned = set()
+    for match in PLANNED_REFERENCE.finditer(content):
+        planned.add(match.group(1).split(":")[0])
+    return planned
+
+
 def check_file_references(content: str, base_path: Path) -> tuple[list[str], list[str]]:
-    """Verify that referenced project files exist."""
+    """Verify that referenced project files exist.
+
+    A reference whose next backtick span is "(planned)" is skipped: the file is
+    declared as not yet written, so its absence is not a wrong path. An unmarked
+    missing reference is still reported and still costs score.
+    """
     patterns = [
         r"\|\s*([a-zA-Z0-9_\-./]+\.[a-zA-Z]+)\s*\|",
         r"`([a-zA-Z0-9_\-./]+\.[a-zA-Z]+(?::\d+)?)`",
         r"(?:^|\s)([a-zA-Z0-9_\-./]+\.[a-zA-Z]+:\d+)",
     ]
 
+    planned = planned_references(content)
     found_files = set()
     for pattern in patterns:
         for match in re.findall(pattern, content):
@@ -187,7 +216,7 @@ def check_file_references(content: str, base_path: Path) -> tuple[list[str], lis
                 found_files.add(filepath)
 
     existing, missing = [], []
-    for filepath in sorted(found_files):
+    for filepath in sorted(found_files - planned):
         if (base_path / filepath).exists():
             existing.append(filepath)
         else:

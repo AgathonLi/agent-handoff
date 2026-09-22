@@ -64,6 +64,56 @@ handoff files to appear inside unrelated directories — including inside this
 skill's own directory when a script is run from there. Use `--project-root` or
 `--handoff-dir` to resolve such a failure.
 
+## Call intent
+
+The skill is invoked with a natural-language intent, not with script argv. Text
+placed in the host's skill `args` is **not** forwarded to the scripts: `--help`,
+`--dir` and a sentence of instructions are all ignored there, and the agent then
+has to guess which script to run. Pick the script from the intent instead.
+
+| Intent | When | Script |
+|--------|------|--------|
+| `read-only locate` | Find the latest handoff and judge whether it is still usable. Do not create one | `list_handoffs.py` |
+| `create` | A session is ending, a milestone completes, or context must be saved | `create_handoff.py` |
+| `resume` | Continue work another agent left behind | `list_handoffs.py`, then read the file it names |
+| `validate` | Check a handoff that already exists | `validate_handoff.py` |
+
+There is no `--dir`. The only directory override is `--handoff-dir`, and it is a
+script flag, passed on the script command line — never through skill `args`.
+`--help` on a script prints that script's usage; it is not a skill-level command.
+
+Two shapes that come up in practice:
+
+Read-only locate, when the request is "list and read the latest handoff, do not
+create one":
+
+```bash
+python scripts/list_handoffs.py
+```
+
+Stop after reading the file it reports. Do not run `create_handoff.py`.
+
+Abandoning a scaffold. If step 2 below is not going to happen, delete the file
+in the same turn. An unfilled scaffold stays in the listing as
+`[untitled - needs completion]` until someone removes it by hand:
+
+```bash
+rm <handoff-file>
+```
+
+`list_handoffs.py` prints that removal hint for any handoff it marks
+`Needs work`. It never deletes a file itself.
+
+## Document kinds
+
+Plans, task books and reviews use the **same** scaffold as a session handoff.
+Do not add a `--kind` flag and do not relax the required sections for them.
+
+`Important Context` and `Immediate Next Steps` are what the next reader needs
+regardless of document type. For a plan, write what the document is and what the
+first action is; for a review, write the conclusion and what should happen next.
+A document that cannot fill those two sections is not ready to hand off.
+
 ## CREATE workflow
 
 ### Step 1: generate the scaffold
@@ -127,10 +177,42 @@ If the pointer is to another file, confirm that file actually carries the path.
 A handoff that defers to `AGENTS.md` for a path `AGENTS.md` never recorded is a
 dangling pointer that validation cannot catch.
 
+#### A path that does not exist yet
+
+The same check cannot tell a wrong path from a path the plan has not created
+yet, so an unmarked missing reference is always treated as wrong and costs
+score.
+
+When the file is genuinely planned and not yet written, end the backtick-quoted
+reference with ` (planned)`:
+
+```markdown
+Next session creates `src/auth/session.py` `(planned)`.
+```
+
+The marker must be a separate backtick span immediately after the path. A
+`(planned)` written outside backticks, or attached to a different reference, does
+not count. Validation skips a marked reference and does not deduct for it.
+Remove the marker once the file exists — a marked reference is not verified.
+
 ### Step 4: confirm
 
 Report the file location, score, any warnings, and the first action item for the
 next session.
+
+Then stage the handoff. A validated file that was never `git add`ed has no
+history behind it: the one observed loss was an uncommitted handoff, while every
+previously committed handoff in that directory came back with `git restore`.
+
+```bash
+git add <handoff-file>
+```
+
+Staging is required. Committing is not — do not commit unreviewed content just
+because validation passed. Pushing is a separate decision, and on a public
+remote it needs the owner's explicit confirmation. Staging does not protect
+against a working tree being deleted; it is the cheapest step that makes the
+file recoverable.
 
 ## RESUME workflow
 
@@ -141,7 +223,15 @@ python scripts/list_handoffs.py
 python scripts/list_handoffs.py --project-root /path/to/project
 ```
 
+The listing reports a `Freshness` line for the **most recent** handoff only,
+using the same assessment as `check_staleness.py`. If that assessment fails the
+line reads `unknown` and the listing still succeeds. Older handoffs are not
+assessed here.
+
 ### Step 2: check freshness
+
+Read the `Freshness` line from step 1. Run the full check only when that line is
+`unknown`, or when the handoff you are resuming is not the most recent one:
 
 ```bash
 python scripts/check_staleness.py <handoff-file>
@@ -213,6 +303,11 @@ starting work; write a new one before finishing.
 pointed at it. That one line plus a neutral directory is what makes the handoff
 actually reachable from another agent.
 
+When finishing a session, update that pointer if the project keeps a handoff
+index or a working-memory note and either one now disagrees with the new file.
+Update the pointer only. Do not copy the handoff body into a second document —
+the same fact kept in two places drifts.
+
 ## Resources
 
 ### scripts/
@@ -221,7 +316,7 @@ actually reachable from another agent.
 |--------|---------|
 | `handoff_paths.py` | Shared directory and project root resolution. Imported by the others; not run directly |
 | `create_handoff.py [slug] [--continues-from F] [--handoff-dir D] [--project-root R]` | Generate a scaffolded handoff |
-| `list_handoffs.py [--handoff-dir D] [--project-root R] [--json]` | List available handoffs |
+| `list_handoffs.py [--handoff-dir D] [--project-root R] [--json]` | List available handoffs. Reports freshness for the newest one and a removal hint for unfilled scaffolds |
 | `validate_handoff.py <file> [--project-root R] [--json]` | Check completeness, quality and secrets |
 | `check_staleness.py <file> [--project-root R] [--json]` | Assess whether context is still current |
 
