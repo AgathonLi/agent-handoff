@@ -60,7 +60,7 @@ python scripts/create_handoff.py implementing-auth
 # Create, chained to a previous handoff
 python scripts/create_handoff.py auth-part-2 --continues-from 2026-09-18-auth.md
 
-# List
+# List newest 5 (use --limit N or --all for history)
 python scripts/list_handoffs.py
 
 # Validate before finishing
@@ -141,15 +141,35 @@ Section headings must be level 1, 2 or 3 (`#`, `##`, `###`). The generated
 scaffold uses `##`.
 
 For sub-headings *inside* a section, use level 4 (`####`) or deeper. Any heading
-at level 1-3 terminates the preceding section, so a level-3 sub-heading would cut
-its parent short and the parent could then fail the 50-character minimum content
-check.
+at level 1-3 outside fenced code terminates the preceding section, so a level-3
+sub-heading would cut its parent short and the parent could then fail the
+50-character minimum content check. Headings and comments inside backtick or
+tilde code fences are not section boundaries and cannot satisfy required sections.
 
 Required sections, each needing at least 50 characters of real content:
 
 - `Current State Summary`
 - `Important Context`
 - `Immediate Next Steps`
+
+## Lightweight workflow
+
+The default scaffold contains metadata, lineage and three core sections. Add
+optional sections only when useful; a complete core-only document scores 88.
+Create at a real pause, transfer or context-loss boundary, not every small
+milestone. Existing project rules and explicit user requests take precedence.
+Read the latest relevant handoff and follow predecessors only when needed.
+Re-check pending items against current evidence; keep lasting state in the
+project fact source and use pointers instead of copying it into several records.
+Validate once after editing, do not chase 100. Follow project Git/storage policy;
+never force-add ignored handoffs or commit/push automatically.
+
+Default listing shows newest 5; `--limit N` changes the window and `--all` shows
+history. JSON `count` is total; `shown_count` and `hidden_count` explain the
+selected `handoffs` array. Listing reminds you to complete titled drafts; only
+untitled scaffolds get conditional removal hints. Existing files are not moved
+or deleted. Archive only with approval after checking active dependencies and
+links, not merely by age.
 
 ## Validation
 
@@ -167,7 +187,12 @@ Secret patterns cover API keys, passwords, bearer tokens, JWTs, PEM private keys
 database connection strings with embedded passwords, and provider-specific
 formats for AWS, GitHub, OpenAI, Anthropic, Google and Slack.
 
-A handoff with secrets detected is BLOCKED regardless of score.
+A handoff with secrets detected is BLOCKED regardless of score. A valid handoff
+also needs complete required sections, a replaced scaffold title, no TODOs and
+a score of at least 70. JSON `title_placeholder` reports an unfilled title;
+mentions of that marker in the body do not count as an unfilled title.
+Scores measure structure and limited static checks, not factual correctness,
+authorization, live state or semantic consistency.
 
 A backtick-quoted path immediately followed by a separate `` `(planned)` `` span
 is skipped rather than deducted. The marker is how a plan cites a file that does
@@ -181,7 +206,10 @@ referenced files that no longer exist.
 
 Git history is the strongest signal. For projects without version control the
 check falls back to filesystem modification times rather than giving up, and the
-report names which signal was used.
+report names which signal was used. Non-Git scans prune generated `outputs/`,
+`tmp/`, dependencies and client state before traversal and report truncation.
+Verify task-relevant artifacts directly. `FRESH` means no obvious stale signals,
+not proof that execution is safe.
 
 Exit codes: `0` fresh or slightly stale, `1` stale, `2` very stale or resolution
 failure.
@@ -194,8 +222,9 @@ know to look. Add this to the project's `AGENTS.md`:
 ```markdown
 ## Handoffs
 
-Session handoff documents live in `.handoff/`. Read the most recent one before
-starting work; write a new one before finishing.
+Snapshots live in `.handoff/`, not the project state authority. Read the latest
+relevant handoff when resuming. Write a short one when pausing or transferring
+meaningful work; follow project storage/Git policy. Verify pending items first.
 ```
 
 `AGENTS.md` is read natively by Codex and OpenCode, and by Claude Code when

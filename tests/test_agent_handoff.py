@@ -194,6 +194,14 @@ class TestCreateHandoff(unittest.TestCase):
                 self.assertEqual(result.returncode, 2)
                 self.assertIn("No project root marker", result.stderr)
 
+    def test_default_scaffold_is_compact(self):
+        with TempProject() as root:
+            run_script("create_handoff.py", "compact", cwd=root)
+            content = next((root / ".handoff").glob("*.md")).read_text()
+            self.assertLessEqual(len(content.splitlines()), 65)
+            self.assertEqual(content.count("[TODO:"), 3)
+            self.assertNotIn("## Architecture Overview", content)
+
     def test_scaffold_uses_level_two_headings(self):
         with TempProject() as root:
             run_script("create_handoff.py", "heading-check", cwd=root)
@@ -238,6 +246,160 @@ class TestValidation(unittest.TestCase):
             f"1. Do the first thing that matters most to the next agent here.\n"
             f"2. Then verify the change behaves as the handoff describes.\n"
         )
+
+    def _with_recommended_sections(self, body: str) -> str:
+        for section in (
+            "Architecture Overview", "Critical Files", "Files Modified",
+            "Decisions Made", "Assumptions Made", "Potential Gotchas",
+        ):
+            body += f"\n## {section}\n\n{FILLER}\n"
+        return body
+
+    def test_core_only_document_is_ready_at_88(self):
+        import json
+        import re
+
+        with TempProject() as root:
+            created = run_script("create_handoff.py", "core-only", cwd=root)
+            self.assertEqual(created.returncode, 0, created.stderr)
+            doc = next((root / ".handoff").glob("*.md"))
+            content = doc.read_text(encoding="utf-8")
+            content = content.replace("[TASK_TITLE - replace this]", "Core-only handoff")
+            doc.write_text(re.sub(r"\[TODO:[^\]]*\]", FILLER, content), encoding="utf-8")
+            for flags in ((), ("--json",)):
+                with self.subTest(flags=flags):
+                    result = run_script("validate_handoff.py", str(doc), *flags, cwd=root)
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    if flags:
+                        data = json.loads(result.stdout)
+                        self.assertEqual(data["score"], 88)
+                        self.assertTrue(data["required_complete"])
+                        self.assertTrue(data["todos_clear"])
+                    else:
+                        self.assertIn("88/100", result.stdout)
+                        self.assertIn("Verdict: READY", result.stdout)
+
+    def test_high_score_does_not_override_remaining_todo(self):
+        import json
+
+        body = self._with_recommended_sections(self._complete_doc())
+        body += "\n## Deferred Items\n\n[TODO: Add the remaining evidence]\n"
+        with TempProject() as root:
+            doc = self._write(root, body)
+            for flags in ((), ("--json",)):
+                with self.subTest(flags=flags):
+                    result = run_script("validate_handoff.py", str(doc), *flags, cwd=root)
+                    self.assertEqual(result.returncode, 1, result.stderr)
+                    if flags:
+                        data = json.loads(result.stdout)
+                        self.assertEqual(data["score"], 70)
+                        self.assertTrue(data["required_complete"])
+                        self.assertFalse(data["todos_clear"])
+                    else:
+                        self.assertIn("70/100", result.stdout)
+                        self.assertIn("Verdict: NEEDS WORK", result.stdout)
+
+    def test_high_score_does_not_override_credentials_in_either_mode(self):
+        import json
+
+        body = self._with_recommended_sections(self._complete_doc())
+        body += '\napi_key = "AKIAIOSFODNN7EXAMPLE"\n'
+        with TempProject() as root:
+            doc = self._write(root, body)
+            for flags in ((), ("--json",)):
+                with self.subTest(flags=flags):
+                    result = run_script("validate_handoff.py", str(doc), *flags, cwd=root)
+                    self.assertEqual(result.returncode, 1, result.stderr)
+                    if flags:
+                        data = json.loads(result.stdout)
+                        self.assertEqual(data["score"], 80)
+                        self.assertTrue(data["required_complete"])
+                        self.assertTrue(data["todos_clear"])
+                        self.assertTrue(data["secrets_found"])
+                    else:
+                        self.assertIn("Verdict: BLOCKED", result.stdout)
+
+    def test_unfilled_title_blocks_an_otherwise_complete_document(self):
+        import json
+
+        body = self._complete_doc().replace(
+            "# Handoff: test", "# Handoff: [TASK_TITLE - replace this]"
+        )
+        with TempProject() as root:
+            doc = self._write(root, body)
+            for flags in ((), ("--json",)):
+                with self.subTest(flags=flags):
+                    result = run_script("validate_handoff.py", str(doc), *flags, cwd=root)
+                    self.assertEqual(result.returncode, 1, result.stderr)
+                    if flags:
+                        data = json.loads(result.stdout)
+                        self.assertEqual(data["score"], 88)
+                        self.assertTrue(data["title_placeholder"])
+                        self.assertTrue(data["required_complete"])
+                        self.assertTrue(data["todos_clear"])
+                    else:
+                        self.assertIn("Title placeholder", result.stdout)
+                        self.assertIn("Verdict: NEEDS WORK", result.stdout)
+
+    def test_title_marker_in_body_does_not_block_completion(self):
+        import json
+
+        body = self._complete_doc() + "\nDiscussed the `[TASK_TITLE - replace this]` marker.\n"
+        with TempProject() as root:
+            doc = self._write(root, body)
+            result = run_script("validate_handoff.py", str(doc), "--json", cwd=root)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertFalse(json.loads(result.stdout)["title_placeholder"])
+
+    def test_fenced_comments_do_not_truncate_sections(self):
+        cases = (
+            ("```python", "# Short comment\n", "```"),
+            ("~~~python", "## Short comment\n", "~~~"),
+            ("````python", "```\n# Short comment\n", "````"),
+            ("   ```python", "### Short comment\n", "   ```"),
+        )
+        with TempProject() as root:
+            for opening, code, closing in cases:
+                with self.subTest(opening=opening):
+                    body = (
+                        "# Handoff: test\n\n## Current State Summary\n\n"
+                        f"Brief context.\n{opening}\n{code}{closing}\n{FILLER}\n\n"
+                        f"## Important Context\n\n{FILLER}\n\n"
+                        f"## Immediate Next Steps\n\n{FILLER}\n"
+                    )
+                    doc = self._write(root, body)
+                    result = run_script("validate_handoff.py", str(doc), cwd=root)
+                    self.assertEqual(result.returncode, 0, result.stdout)
+                    self.assertIn("All required sections complete", result.stdout)
+
+    def test_fenced_headings_do_not_satisfy_sections(self):
+        import json
+
+        body = self._complete_doc().replace("## Important Context", "## Other Context")
+        body += (
+            f"\n```markdown\n## Important Context\n\n{FILLER}\n"
+            f"## Architecture Overview\n\n{FILLER}\n```\n"
+        )
+        with TempProject() as root:
+            doc = self._write(root, body)
+            result = run_script("validate_handoff.py", str(doc), "--json", cwd=root)
+            self.assertEqual(result.returncode, 1, result.stdout)
+            data = json.loads(result.stdout)
+            self.assertIn("Important Context (missing)", data["missing_required"])
+            self.assertIn("Architecture Overview", data["missing_recommended"])
+
+    def test_high_score_does_not_override_missing_required_section(self):
+        import json
+        body = self._complete_doc().replace("## Important Context", "## Other Context")
+        with TempProject() as root:
+            doc = self._write(root, body)
+            for flags in ((), ("--json",)):
+                result = run_script("validate_handoff.py", str(doc), *flags, cwd=root)
+                self.assertNotEqual(result.returncode, 0)
+                if flags:
+                    data = json.loads(result.stdout)
+                    self.assertGreaterEqual(data["score"], 70)
+                    self.assertFalse(data["required_complete"])
 
     def test_accepts_level_three_headings(self):
         """Upstream matched only #/## and scored ### as missing."""
@@ -362,15 +524,70 @@ class TestValidation(unittest.TestCase):
             content = doc.read_text(encoding="utf-8")
             import re
 
-            doc.write_text(
-                re.sub(r"\[TODO:[^\]]*\]", FILLER, content), encoding="utf-8"
-            )
+            content = content.replace("[TASK_TITLE - replace this]", "Complete handoff")
+            content = re.sub(r"\[TODO:[^\]]*\]", FILLER, content)
+            doc.write_text(self._with_recommended_sections(content), encoding="utf-8")
             result = run_script("validate_handoff.py", str(doc), cwd=root)
             self.assertIn("100/100", result.stdout)
             self.assertEqual(result.returncode, 0)
 
 
 class TestListing(unittest.TestCase):
+    def test_completion_status_distinguishes_title_and_body_placeholders(self):
+        import list_handoffs
+
+        cases = (
+            ("[TASK_TITLE - replace this]", "", "Needs work (title placeholder)"),
+            ("[TASK_TITLE - replace this]", "[TODO: Fill this]\n" * 3, "Needs work (3 TODOs)"),
+            ("Real title", "[TODO: Fill this]\n", "In progress (1 TODOs)"),
+            ("Real title", "[TODO: Fill this]\n" * 4, "Needs work (4 TODOs)"),
+            ("Real title", "", "Complete"),
+            ("Real title", "Discussed [TASK_TITLE - replace this].\n[TODO: Add evidence]\n",
+             "In progress (1 TODOs)"),
+        )
+        with TempProject() as root:
+            doc = root / "draft.md"
+            for title, body, expected in cases:
+                with self.subTest(title=title, expected=expected):
+                    doc.write_text(f"# Handoff: {title}\n\n{body}", encoding="utf-8")
+                    self.assertEqual(list_handoffs.check_completion_status(doc), expected)
+
+    def test_in_progress_document_does_not_get_a_removal_hint(self):
+        with TempProject() as root:
+            directory = root / ".handoff"
+            directory.mkdir()
+            doc = directory / "2026-09-01-120000-draft.md"
+            doc.write_text("# Handoff: Active work\n\n[TODO: Add the latest evidence]\n", encoding="utf-8")
+            result = run_script("list_handoffs.py", cwd=root)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("In progress (1 TODOs)", result.stdout)
+            self.assertIn("Incomplete handoff", result.stdout)
+            self.assertNotIn("Unfilled scaffold", result.stdout)
+            self.assertNotIn('rm "', result.stdout)
+            self.assertTrue(doc.exists())
+
+    def test_default_limit_and_explicit_all_preserve_history(self):
+        import json
+        with TempProject() as root:
+            directory = root / ".handoff"
+            directory.mkdir()
+            for day in range(1, 8):
+                (directory / f"2026-09-{day:02d}-120000-test.md").write_text("# Handoff: test\n")
+            default = run_script("list_handoffs.py", "--json", cwd=root)
+            data = json.loads(default.stdout)
+            self.assertEqual(len(data["handoffs"]), 5)
+            self.assertEqual(data["count"], 7)
+            self.assertEqual(data["shown_count"], 5)
+            self.assertEqual(data["hidden_count"], 2)
+            self.assertTrue(data["handoffs"][0]["filename"].startswith("2026-09-07"))
+            all_rows = json.loads(run_script("list_handoffs.py", "--all", "--json", cwd=root).stdout)
+            self.assertEqual(len(all_rows["handoffs"]), 7)
+            self.assertEqual(len(list(directory.glob("*.md"))), 7)
+            limited = json.loads(run_script("list_handoffs.py", "--limit", "1", "--json", cwd=root).stdout)
+            self.assertEqual(len(limited["handoffs"]), 1)
+            invalid = run_script("list_handoffs.py", "--limit", "0", cwd=root)
+            self.assertEqual(invalid.returncode, 2)
+
     def test_reports_resolution_source(self):
         with TempProject() as root:
             run_script("create_handoff.py", "listed", cwd=root)
@@ -440,6 +657,60 @@ class TestListing(unittest.TestCase):
 
 
 class TestStaleness(unittest.TestCase):
+    def test_scan_limit_only_reports_truncation_when_an_eligible_file_remains(self):
+        from datetime import datetime
+        from unittest.mock import patch
+        import check_staleness
+
+        with TempProject() as root:
+            for name in ("outputs", "tmp"):
+                generated = root / name / "nested"
+                generated.mkdir(parents=True)
+                (generated / "artifact.json").write_text("{}", encoding="utf-8")
+            with patch.object(check_staleness, "MAX_SCAN_FILES", 2):
+                changed, truncated = check_staleness.get_mtime_changed_files(datetime(2000, 1, 1), root)
+                self.assertEqual(set(changed), {"AGENTS.md", "app.py"})
+                self.assertFalse(truncated)
+                (root / "z_extra.py").write_text("x = 2\n", encoding="utf-8")
+                changed, truncated = check_staleness.get_mtime_changed_files(datetime(2000, 1, 1), root)
+                self.assertEqual(set(changed), {"AGENTS.md", "app.py"})
+                self.assertTrue(truncated)
+
+    def test_recommendations_require_verification_instead_of_granting_safety(self):
+        import check_staleness
+
+        cases = (
+            ((0, 0, 0, True, 0), "FRESH"),
+            ((2, 0, 0, True, 0), "SLIGHTLY_STALE"),
+            ((31, 0, 0, True, 0), "STALE"),
+            ((31, 0, 0, False, 0), "VERY_STALE"),
+        )
+        for signals, expected in cases:
+            with self.subTest(level=expected):
+                level, recommendation, _ = check_staleness.calculate_staleness_level(*signals)
+                self.assertEqual(level, expected)
+                self.assertIn("task premises", recommendation.lower())
+                self.assertNotIn("safe to resume", recommendation.lower())
+                self.assertNotIn("creating a fresh handoff", recommendation.lower())
+
+    def test_generated_outputs_do_not_consume_scan_budget(self):
+        from datetime import datetime
+        import check_staleness
+        with TempProject() as root:
+            outputs = root / "outputs" / "selftest"
+            outputs.mkdir(parents=True)
+            for index in range(12):
+                (outputs / f"{index}.json").write_text("{}")
+            old_limit = check_staleness.MAX_SCAN_FILES
+            check_staleness.MAX_SCAN_FILES = 5
+            try:
+                changed, truncated = check_staleness.get_mtime_changed_files(datetime(2000, 1, 1), root)
+            finally:
+                check_staleness.MAX_SCAN_FILES = old_limit
+            self.assertFalse(truncated)
+            self.assertIn("app.py", changed)
+            self.assertFalse(any(item.startswith("outputs/") for item in changed))
+
     def test_non_git_project_gets_a_real_verdict(self):
         """Upstream returned UNKNOWN for every non-git project."""
         with TempProject(git=False) as root:

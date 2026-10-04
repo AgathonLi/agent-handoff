@@ -2,9 +2,9 @@
 """
 Create a handoff document with auto-detected project metadata.
 
-Pre-fills timestamp, project path, git branch, recent commits and modified
-files, then leaves [TODO: ...] markers for the context only the outgoing agent
-can supply.
+Pre-fills timestamp, project path, git branch and recent commits, then leaves
+a title placeholder and [TODO: ...] markers for the context only the outgoing
+agent can supply.
 
 Usage:
     python create_handoff.py [slug] [options]
@@ -179,8 +179,8 @@ def build_content(
 ) -> str:
     """Assemble the handoff document body.
 
-    All required and recommended section headers are level 2 ("## "). The
-    validator treats levels 1 through 3 as section headers, so level 4 ("#### ")
+    Core section headers are level 2 ("## "). The validator treats levels 1
+    through 3 as section headers, so level 4 ("#### ")
     is the safe choice for any sub-heading you add by hand inside a section.
     """
     branch_line = git_info["branch"] or "[not a git repo or detached HEAD]"
@@ -190,25 +190,13 @@ def build_content(
     else:
         commits_section = "  - [no recent commits or not a git repo]"
 
-    all_modified = sorted(set(git_info["modified_files"] + git_info["staged_files"]))
-    if all_modified:
-        modified_section = "\n".join(
-            f"| {f} | [describe changes] | [why changed] |" for f in all_modified[:10]
-        )
-        if len(all_modified) > 10:
-            modified_section += (
-                f"\n| ... and {len(all_modified) - 10} more files | | |"
-            )
-    else:
-        modified_section = "| [no modified files detected] | | |"
-
     if prev_handoff.get("exists"):
         chain_body = (
             f"- **Continues from**: "
             f"[{prev_handoff['filename']}](./{prev_handoff['filename']})\n"
             f"  - Previous title: {prev_handoff.get('title', 'Unknown')}\n"
             f'- **Supersedes**: [list any older handoffs this replaces, or "None"]\n\n'
-            f"> Review the previous handoff for full context before filling this one."
+            "> Lineage only: read the predecessor when needed, not automatically."
         )
     else:
         chain_body = (
@@ -224,10 +212,8 @@ def build_content(
 - Created: {timestamp}
 - Project: {project_root}
 - Branch: {branch_line}
-- Session duration: [estimate how long you worked]
 
-Recent commits for context:
-
+Recent commits (context only):
 {commits_section}
 
 ## Handoff Chain
@@ -236,76 +222,22 @@ Recent commits for context:
 
 ## Current State Summary
 
-[TODO: One paragraph describing what was being worked on, current status, and where things left off. Needs at least 50 characters of real content to pass validation.]
-
-## Architecture Overview
-
-[TODO: Key architectural insights discovered during this session - structure, main components, data flow]
-
-## Critical Files
-
-| File | Purpose | Relevance |
-|------|---------|-----------|
-| [TODO: Add critical files] | | |
-
-## Key Patterns Discovered
-
-[TODO: Patterns, conventions or idioms in this codebase the next agent should follow]
-
-## Tasks Finished
-
-- [ ] [TODO: List completed tasks]
-
-## Files Modified
-
-| File | Changes | Rationale |
-|------|---------|-----------|
-{modified_section}
-
-## Decisions Made
-
-| Decision | Options Considered | Rationale |
-|----------|-------------------|-----------|
-| [TODO: Document key decisions] | | |
-
-## Immediate Next Steps
-
-1. [TODO: Most critical next action]
-2. [TODO: Second priority]
-3. [TODO: Third priority]
-
-## Blockers and Open Questions
-
-- [ ] [TODO: List any blockers or open questions]
-
-## Deferred Items
-
-- [TODO: Items deferred and why]
+[TODO: Summarize the verified outcome, unfinished work and relevant changes. Cite evidence or the project fact source; distinguish local, committed and deployed state. At least 50 substantive characters.]
 
 ## Important Context
 
-[TODO: The most important section. Write the critical information the next agent MUST know. Needs at least 50 characters of real content to pass validation.]
+[TODO: Record authorization boundaries, blockers and new decisions with rationale. Link stable project documentation instead of repeating it. Distinguish observations from assumptions. At least 50 substantive characters.]
 
-## Assumptions Made
+## Immediate Next Steps
 
-- [TODO: List assumptions made during this session]
-
-## Potential Gotchas
-
-- [TODO: Things that might trip up a new agent - edge cases, quirks, non-obvious behaviour]
-
-## Environment State
-
-[TODO: Tools and services used, active processes, and relevant environment variable NAMES only - never actual values or secrets]
-
-## Related Resources
-
-- [TODO: Links to relevant docs and files]
+[TODO: Give the first concrete action and its verification step, or explicitly state that no work remains. Re-check that each pending item is still pending; do not copy obsolete blockers. At least 50 substantive characters.]
 
 ---
 
-**Security reminder**: run `validate_handoff.py` before finalizing to check for
-accidental secret exposure and incomplete sections.
+Add optional sections only when they supply information the next reader needs.
+Validate once after completing the document; revalidate only after edits.
+Scores check structure and limited static signals, not factual correctness.
+Save according to project policy; do not force-add ignored handoffs.
 """
 
 
@@ -378,7 +310,7 @@ def main() -> int:
     print(f"Created handoff document: {filepath}\n")
     print("Next steps:")
     print(f"  1. Open {filepath}")
-    print("  2. Replace every [TODO: ...] placeholder with real content")
+    print("  2. Replace the title and every [TODO: ...] placeholder with real content")
     print("  3. Prioritize 'Important Context' and 'Immediate Next Steps'")
     print(f"  4. Run: python validate_handoff.py \"{filepath}\"")
     return 0

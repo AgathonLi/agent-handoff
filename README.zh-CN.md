@@ -56,7 +56,7 @@ python scripts/create_handoff.py implementing-auth
 # 创建并链接到上一份交接
 python scripts/create_handoff.py auth-part-2 --continues-from 2026-09-18-auth.md
 
-# 列出
+# 列出最近 5 份（--limit N 指定数量，--all 查看历史）
 python scripts/list_handoffs.py
 
 # 收尾前校验
@@ -132,14 +132,30 @@ handoff_dir = docs/handoffs
 
 章节标题必须是 1、2 或 3 级（`#`、`##`、`###`）。生成的骨架使用 `##`。
 
-章节**内部**的子标题请用 4 级（`####`）或更深。任何 1–3 级标题都会终止前一个章节，
-因此 3 级子标题会截断父节内容，父节可能因此达不到 50 字符的最低内容要求。
+章节**内部**的子标题请用 4 级（`####`）或更深。围栏代码块外的任何 1–3 级标题都会
+终止前一个章节，因此 3 级子标题会截断父节内容，父节可能因此达不到 50 字符的
+最低内容要求。反引号或波浪号围栏代码块中的标题和注释不作为章节边界，也不能充当
+必需章节。
 
 必需章节，每节至少需要 50 字符的实质内容：
 
 - `Current State Summary`
 - `Important Context`
 - `Immediate Next Steps`
+
+## 轻量工作流
+
+默认骨架只含元信息、承接关系与三个核心章节；可选章节仅在有用时添加。
+仅写完整核心章节通常得 88 分，不必追求 100 分。仅在真正暂停、换 Agent、
+上下文即将丢失或用户明确要求时创建，不为每个小里程碑都写一份；已有项目规则优先。
+恢复时读最新相关交接，前序按需回溯。待办须对照当前证据复核，持久状态保留在
+项目事实源，其他记录只写指针，不复制多套待办。编辑完成后校验一次即可。
+保存遵循项目 Git/存储政策，不强制添加被忽略的交接，不自动提交或推送。
+
+列表默认显示最近 5 份，`--limit N` 调整数量，`--all` 查看历史。
+JSON 的 `count` 是总数，`shown_count` / `hidden_count` 解释所选 `handoffs` 数组。
+列表提醒补完已有标题的草稿；只有未填标题的骨架才显示附条件的删除提示。
+不自动移动或删除旧文件；归档须经授权并检查活跃依赖与链接，不仅凭文件年龄决定。
 
 ## 校验
 
@@ -156,7 +172,10 @@ handoff_dir = docs/handoffs
 密钥模式覆盖 API key、密码、bearer token、JWT、PEM 私钥、内嵌密码的数据库连接串，
 以及 AWS、GitHub、OpenAI、Anthropic、Google 和 Slack 的专有格式。
 
-**检出密钥的交接一律判定 BLOCKED，与分数无关。**
+**检出密钥的交接一律判定 BLOCKED，与分数无关。** 定稿还须满足必需章节、
+替换骨架标题、无残留 TODO、至少 70 分。JSON 的 `title_placeholder` 标明标题占位符
+是否未填；在正文讨论该标记不会被当作未填标题。评分只反映结构及有限静态检查，
+不证明事实一致、授权有效或线上状态正确。
 
 反引号引用的路径，若紧跟另一个独立的 `` `(planned)` `` 跨度，则跳过、不扣分。
 这是计划文档引用尚未创建文件的方式；写在反引号之外的 `(planned)` 不豁免任何引用。
@@ -167,7 +186,9 @@ handoff_dir = docs/handoffs
 依据是文档年龄、其后的提交数、变更文件数、分支分叉，以及引用文件是否已不存在。
 
 git 历史是最强信号。对无版本控制的项目，检查会回退到文件系统修改时间而不是直接
-放弃，报告中会写明用的是哪种信号。
+放弃，报告中会写明用的是哪种信号。无 Git 扫描在遍历前剪除 `outputs/`、
+`tmp/`、依赖与客户端状态目录，达到扫描上限时披露；任务相关产物仍须直接核查。
+`FRESH` 只表示未发现明显过期信号，不代表可以安全执行。
 
 退出码：`0` 表示 fresh 或 slightly stale，`1` 表示 stale，`2` 表示 very stale
 或解析失败。
@@ -180,8 +201,9 @@ git 历史是最强信号。对无版本控制的项目，检查会回退到文�
 ```markdown
 ## Handoffs
 
-Session handoff documents live in `.handoff/`. Read the most recent one before
-starting work; write a new one before finishing.
+Snapshots live in `.handoff/`, not the project state authority. Read the latest
+relevant handoff when resuming. Write a short one when pausing or transferring
+meaningful work; follow project storage/Git policy. Verify pending items first.
 ```
 
 `AGENTS.md` 会被 Codex 和 OpenCode 原生读取，Claude Code 在被指向它时也会读。
@@ -204,8 +226,8 @@ python scripts/sync_to_host.py            # 预演
 python scripts/sync_to_host.py --apply
 ```
 
-同步是单向的，并且会保留 `AGENTS.md`、`tests/`、`.github/`、脚本自身，以及
-`.handoff/`、`.workbuddy/` 这类宿主写入的本地目录。保留 `AGENTS.md` 是正确性要求
+同步是单向的，载荷排除 `AGENTS.md`、`tests/`、`.github/`、脚本自身，以及
+`.handoff/`、`.workbuddy/` 这类宿主写入的本地目录。排除 `AGENTS.md` 是正确性要求
 而非整洁性偏好：它是项目根标志，安装副本里若含有它，该副本就会被识别为项目根并
 接收交接文件，而不是正确报错。
 

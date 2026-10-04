@@ -38,6 +38,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import subprocess
 import sys
@@ -66,6 +67,8 @@ SKIP_DIRS = {
     ".next",
     ".cache",
     "target",
+    "outputs",
+    "tmp",
     ".handoff",
     ".claude",
     ".workbuddy",
@@ -192,19 +195,20 @@ def get_mtime_changed_files(
     changed: list[str] = []
     scanned = 0
 
-    for path in project_path.rglob("*"):
-        if scanned >= MAX_SCAN_FILES:
-            return changed, True
-        if any(part in SKIP_DIRS for part in path.parts):
-            continue
-        if not path.is_file():
-            continue
-        scanned += 1
-        try:
-            if path.stat().st_mtime > cutoff:
-                changed.append(str(path.relative_to(project_path)))
-        except OSError:
-            continue
+    for directory, dirnames, filenames in os.walk(project_path, followlinks=False):
+        dirnames[:] = sorted(d for d in dirnames if d not in SKIP_DIRS)
+        for filename in sorted(filenames):
+            path = Path(directory) / filename
+            if not path.is_file():
+                continue
+            if scanned >= MAX_SCAN_FILES:
+                return changed, True
+            scanned += 1
+            try:
+                if path.stat().st_mtime > cutoff:
+                    changed.append(str(path.relative_to(project_path)))
+            except OSError:
+                continue
 
     return changed, False
 
@@ -272,22 +276,26 @@ def calculate_staleness_level(
         score += 1
 
     if score == 0:
-        return "FRESH", "Safe to resume - minimal changes since handoff", issues
+        return (
+            "FRESH",
+            "No obvious staleness signals; verify task premises before resuming",
+            issues,
+        )
     if score <= 2:
         return (
             "SLIGHTLY_STALE",
-            "Generally safe to resume - review changes before continuing",
+            "Review detected changes and verify task premises before resuming",
             issues,
         )
     if score <= 4:
         return (
             "STALE",
-            "Proceed with caution - significant changes may affect context",
+            "Re-check task premises; significant changes may affect context",
             issues,
         )
     return (
         "VERY_STALE",
-        "Consider creating a fresh handoff - too many changes since the original",
+        "Reconstruct current task premises; the original snapshot may no longer apply",
         issues,
     )
 
@@ -439,10 +447,10 @@ def print_report(result: dict) -> None:
 
     print(f"\n{bar}")
     verdicts = {
-        "FRESH": "Verdict: [OK] Safe to resume",
+        "FRESH": "Verdict: [OK] No obvious staleness signals; verify task premises",
         "SLIGHTLY_STALE": "Verdict: [OK] Review changes, then resume",
         "STALE": "Verdict: [CAUTION] Verify context before resuming",
-        "VERY_STALE": "Verdict: [WARNING] Consider creating a fresh handoff",
+        "VERY_STALE": "Verdict: [WARNING] Reconstruct current task premises before resuming",
     }
     print(verdicts.get(result["staleness_level"], "Verdict: [UNKNOWN]"))
 

@@ -1,61 +1,37 @@
-# Resume checklist
+# Proportional resume checklist
 
-Work through this before acting on a handoff. Skipping it is how an agent
-confidently continues from context that no longer holds.
+Apply the checks relevant to the next action, not a new full-project audit.
 
-## 1. Locate and assess
+## Locate and read
 
-- [ ] `python scripts/list_handoffs.py` — confirm which handoff is most recent
-- [ ] `python scripts/check_staleness.py <file>` — get a freshness verdict
-- [ ] If `VERY_STALE`: prefer creating a fresh handoff over resuming this one
-- [ ] Confirm the reported project root matches the project you intend to work in
+- List recent handoffs; choose the latest relevant task, not just the newest file.
+- Use listing freshness for the newest file. Run `check_staleness.py` only for
+  another file or an unknown assessment; no duplicate freshness check is needed.
+- Confirm project root and branch (where applicable); understand device-path
+  differences rather than requiring a Windows path to exist on Linux.
+- Read the selected document fully. Follow predecessor links only for missing
+  rationale, ambiguity or evidence; do not load the entire chain automatically.
 
-## 2. Read completely
+## Verify the first action
 
-- [ ] Read the entire handoff before taking any action
-- [ ] If "Continues from" is set, read the predecessor too
-- [ ] Note anything marked as an assumption — those need verification, not trust
+- Is the task still pending, or already resolved in the current fact source?
+- Do its relevant files and evidence exist, and do assumptions still hold?
+- Is the observed working state consistent with the proposed change? Check
+  branch/status/diff where Git is available; do not overwrite concurrent work.
+- Are blockers still active, and is authorization current for this action?
+- For live-data or deployed-state claims, check the actual source when relevant;
+  neither snapshot age nor validator score proves them.
 
-## 3. Verify the environment
+`FRESH` means no obvious stale signals found, not safe execution. `VERY_STALE`
+means carefully reconstruct current premises, not automatically create another
+handoff. Non-Git scans ignore generated outputs and tmp; inspect task evidence
+there directly rather than interpreting ignored files as verified unchanged.
 
-- [ ] Current directory matches the handoff's `Project` field
-- [ ] Current git branch matches the handoff's `Branch` field, or you understand
-      why it differs
-- [ ] Files listed in "Critical Files" still exist
-- [ ] `git status` is consistent with what "Files Modified" describes
+## Begin or surface a conflict
 
-## 4. Re-check the premises
-
-- [ ] Each item in "Assumptions Made" still holds — verify, do not assume
-- [ ] Each item in "Blockers and Open Questions" — resolved, or still blocking?
-- [ ] Decisions in "Decisions Made" still apply given any changes since
-- [ ] Nothing in "Potential Gotchas" has been silently triggered already
-
-## 5. Check for conflicts
-
-- [ ] Files changed since the handoff do not conflict with the planned next steps
-- [ ] No one else rewrote the area you are about to touch
-- [ ] Dependencies and tooling still install and run
-
-## 6. Confirm before diverging
-
-- [ ] If the plan in "Immediate Next Steps" no longer makes sense, say so before
-      substituting your own plan
-- [ ] If the handoff conflicts with observed project state, surface the conflict
-      rather than picking a side silently
-
-## 7. Begin
-
-- [ ] Start at "Immediate Next Steps" item 1
-- [ ] Keep "Key Patterns Discovered" in view so new code matches the codebase
-- [ ] As you work, mark completed items and record new findings
-- [ ] Before finishing, create the next handoff with `--continues-from`
-
-## Red flags
-
-Stop and report rather than proceeding when:
-
-- The handoff references files that no longer exist and the plan depends on them
-- The branch differs and the handoff's work appears already merged or reverted
-- "Important Context" contradicts what the code actually does now
-- Staleness is `VERY_STALE` and the next steps assume a state you cannot confirm
+Start the first still-valid authorized action. If snapshots, designated fact
+sources and observed state conflict, report the conflict before making changes.
+Do not silently choose stale instructions or manufacture a new authorization.
+Create another short handoff only at a real pause/transfer/context-loss boundary,
+or when project rules or the user explicitly require one. Update pointers rather
+than duplicating state into multiple records.

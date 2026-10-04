@@ -3,7 +3,7 @@
 Validate a handoff document for completeness, quality and secret exposure.
 
 Checks performed:
-    - No [TODO: ...] placeholders remain
+    - No [TODO: ...] placeholders or generated title placeholder remain
     - Required sections present and substantive
     - Recommended sections present
     - No credentials detected
@@ -90,6 +90,37 @@ RECOMMENDED_SECTIONS = [
 MIN_SECTION_CHARS = 50
 
 
+def _mask_fenced_code(content: str) -> str:
+    """Hide fenced code from heading checks while preserving character offsets."""
+    lines = []
+    fence_char = None
+    fence_length = 0
+    for line in content.splitlines(keepends=True):
+        fence = re.match(r" {0,3}(`{3,}|~{3,})([^\r\n]*)", line)
+        in_fence = fence_char is not None
+        if in_fence:
+            if (
+                fence
+                and fence.group(1)[0] == fence_char
+                and len(fence.group(1)) >= fence_length
+                and not fence.group(2).strip()
+            ):
+                fence_char = None
+        elif fence and not (fence.group(1)[0] == "`" and "`" in fence.group(2)):
+            fence_char = fence.group(1)[0]
+            fence_length = len(fence.group(1))
+            in_fence = True
+        lines.append(re.sub(r"[^\r\n]", " ", line) if in_fence else line)
+    return "".join(lines)
+
+
+def has_title_placeholder(content: str) -> bool:
+    """Detect the generated title placeholder, not mentions in the document body."""
+    headings = _mask_fenced_code(content)
+    match = re.search(r"^#\s+(?:Handoff:\s*)?(.+)$", headings, re.MULTILINE)
+    return bool(match and re.match(r"\[TASK_TITLE\b", match.group(1).strip()))
+
+
 def check_todos(content: str) -> tuple[bool, list[str]]:
     """Detect remaining TODO placeholders."""
     todos = re.findall(r"\[TODO:[^\]]*\]", content)
@@ -103,13 +134,14 @@ def _section_bounds(content: str, section: str) -> tuple[int, int] | None:
     heading is absent. The section ends at the next heading of level 1-3, so a
     level-4 sub-heading stays inside the parent section as intended.
     """
+    headings = _mask_fenced_code(content)
     pattern = rf"(?:^|\n){SECTION_HEADING}\s*{re.escape(section)}\b"
-    match = re.search(pattern, content, re.IGNORECASE)
+    match = re.search(pattern, headings, re.IGNORECASE)
     if not match:
         return None
 
     start = match.end()
-    next_heading = re.search(rf"\n{SECTION_HEADING}\s+", content[start:])
+    next_heading = re.search(rf"\n{SECTION_HEADING}\s+", headings[start:])
     end = start + next_heading.start() if next_heading else len(content)
     return start, end
 
@@ -136,10 +168,11 @@ def check_required_sections(content: str) -> tuple[bool, list[str]]:
 
 def check_recommended_sections(content: str) -> list[str]:
     """Return recommended sections that are absent."""
+    headings = _mask_fenced_code(content)
     missing = []
     for section in RECOMMENDED_SECTIONS:
         pattern = rf"(?:^|\n){SECTION_HEADING}\s*{re.escape(section)}\b"
-        if not re.search(pattern, content, re.IGNORECASE):
+        if not re.search(pattern, headings, re.IGNORECASE):
             missing.append(section)
     return missing
 
@@ -255,9 +288,9 @@ def calculate_quality_score(
     score = max(0, score)
 
     if score >= 90:
-        rating = "Excellent - ready for handoff"
+        rating = "Excellent - high structural score"
     elif score >= 70:
-        rating = "Good - minor improvements suggested"
+        rating = "Good - review individual checks"
     elif score >= 50:
         rating = "Fair - needs attention before handoff"
     else:
@@ -280,6 +313,7 @@ def validate_handoff(filepath: str, project_root: str | None = None) -> dict:
 
     base_path, base_source = resolve_base_path(path, project_root)
 
+    title_placeholder = has_title_placeholder(content)
     todos_clear, remaining_todos = check_todos(content)
     required_complete, missing_required = check_required_sections(content)
     missing_recommended = check_recommended_sections(content)
@@ -296,6 +330,7 @@ def validate_handoff(filepath: str, project_root: str | None = None) -> dict:
         "base_path_source": base_source,
         "score": score,
         "rating": rating,
+        "title_placeholder": title_placeholder,
         "todos_clear": todos_clear,
         "remaining_todos": remaining_todos[:5],
         "todo_count": len(remaining_todos),
@@ -306,6 +341,18 @@ def validate_handoff(filepath: str, project_root: str | None = None) -> dict:
         "files_verified": len(existing_files),
         "files_missing": missing_files[:5],
     }
+
+
+def is_ready(result: dict) -> bool:
+    """Use the same readiness gate for the text report and JSON exit code."""
+    return (
+        "error" not in result
+        and result.get("score", 0) >= 70
+        and bool(result.get("required_complete"))
+        and bool(result.get("todos_clear"))
+        and not result.get("title_placeholder")
+        and not result.get("secrets_found")
+    )
 
 
 def print_report(result: dict) -> bool:
@@ -323,6 +370,9 @@ def print_report(result: dict) -> bool:
     print(f"              ({result['base_path_source']})")
     print(f"\nQuality score: {result['score']}/100 - {result['rating']}")
     print(bar)
+
+    if result.get("title_placeholder"):
+        print("\n[FAIL] Title placeholder remains; replace it with the task title")
 
     if result["todos_clear"]:
         print("\n[PASS] No TODO placeholders remaining")
@@ -354,7 +404,7 @@ def print_report(result: dict) -> bool:
         print(f"\n[INFO] {result['files_verified']} file reference(s) verified")
 
     if result["missing_recommended"]:
-        print("\n[INFO] Consider adding these sections:")
+        print("\n[INFO] Optional sections omitted (add only if useful; no need to chase 100):")
         for section in result["missing_recommended"]:
             print(f"       - {section}")
 
@@ -363,10 +413,10 @@ def print_report(result: dict) -> bool:
     if result["secrets_found"]:
         print("Verdict: BLOCKED - remove secrets before handoff")
         return False
-    if result["score"] >= 70:
-        print("Verdict: READY for handoff")
+    if is_ready(result):
+        print("Verdict: READY for handoff (static checks only; verify facts and authorization)")
         return True
-    print("Verdict: NEEDS WORK - complete the required sections")
+    print("Verdict: NEEDS WORK - resolve the failed checks before handing off")
     return False
 
 
@@ -388,9 +438,7 @@ def main() -> int:
 
     if args.as_json:
         print(json.dumps(result, indent=2, default=str))
-        return 0 if result.get("score", 0) >= 70 and not result.get(
-            "secrets_found"
-        ) else 1
+        return 0 if is_ready(result) else 1
 
     return 0 if print_report(result) else 1
 

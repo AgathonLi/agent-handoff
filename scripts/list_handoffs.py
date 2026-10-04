@@ -6,7 +6,8 @@ Displays date, title, completion status and size for each handoff, newest
 first, and reports which precedence level resolved the handoff directory.
 The newest handoff also gets a Freshness line from check_staleness; a failure
 of that assessment prints "unknown" and does not fail the listing. Handoffs
-still full of TODO markers are marked Needs work and get a removal hint.
+with placeholders are marked incomplete; untitled scaffolds get a conditional
+removal hint, while titled drafts get a completion reminder.
 
 Usage:
     python list_handoffs.py [options]
@@ -20,6 +21,8 @@ Options:
     --handoff-dir <path>    Override the handoff directory
     --project-root <path>   Override project root detection start point
     --json                  Emit machine-readable JSON
+    --limit N               Show newest N (default: 5)
+    --all                   Show complete history
 """
 
 from __future__ import annotations
@@ -34,6 +37,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from check_staleness import check_staleness  # noqa: E402
+from validate_handoff import has_title_placeholder  # noqa: E402
 from handoff_paths import (  # noqa: E402
     ProjectRootNotFound,
     add_common_args,
@@ -59,13 +63,15 @@ def extract_title(filepath: Path) -> str:
 
 
 def check_completion_status(filepath: Path) -> str:
-    """Summarize completion based on remaining TODO markers."""
+    """Summarize completion based on the title and remaining TODO markers."""
     try:
         content = filepath.read_text(encoding="utf-8")
     except (OSError, UnicodeDecodeError):
         return "Unknown"
 
     todo_count = content.count("[TODO:")
+    if has_title_placeholder(content):
+        return f"Needs work ({todo_count} TODOs)" if todo_count else "Needs work (title placeholder)"
     if todo_count == 0:
         return "Complete"
     if todo_count <= 3:
@@ -139,8 +145,13 @@ def main() -> int:
         dest="as_json",
         help="Emit JSON instead of a formatted list",
     )
+    selection = parser.add_mutually_exclusive_group()
+    selection.add_argument("--limit", type=int, default=5, help="Show the newest N handoffs (default: 5)")
+    selection.add_argument("--all", action="store_true", help="Show all historical handoffs")
     add_common_args(parser)
     args = parser.parse_args()
+    if args.limit < 1:
+        parser.error("--limit must be a positive integer")
 
     try:
         handoff_dir, project_root, source = resolve_handoff_dir(
@@ -156,6 +167,11 @@ def main() -> int:
     if handoffs:
         handoffs[0]["freshness"] = freshness_of(handoffs[0]["path"], project_root)
 
+    total_count = len(handoffs)
+    if not args.all:
+        handoffs = handoffs[:args.limit]
+    hidden_count = total_count - len(handoffs)
+
     if args.as_json:
         print(
             json.dumps(
@@ -163,7 +179,9 @@ def main() -> int:
                     "project_root": str(project_root),
                     "handoff_dir": str(handoff_dir),
                     "resolved_via": source,
-                    "count": len(handoffs),
+                    "count": total_count,
+                    "shown_count": len(handoffs),
+                    "hidden_count": hidden_count,
                     "handoffs": handoffs,
                 },
                 indent=2,
@@ -181,7 +199,9 @@ def main() -> int:
         print("\nCreate one with: python create_handoff.py [slug]")
         return 0
 
-    print(f"Found {len(handoffs)} handoff(s)\n")
+    print(f"Found {total_count} handoff(s); showing {len(handoffs)}\n")
+    if hidden_count:
+        print(f"{hidden_count} older handoff(s) hidden; use --all to view history.\n")
     print("-" * 78)
     for index, h in enumerate(handoffs):
         print(f"  Date:   {format_date(h['date'])}")
@@ -204,12 +224,18 @@ def main() -> int:
             "For any older file run: python check_staleness.py <file>"
         )
     for h in handoffs:
-        if h["status"].startswith("Needs work"):
-            print(f"\nUnfilled scaffold: {h['path']}")
-            print(
-                "If it will not be completed, remove it: "
-                f'rm "{h["path"]}"'
-            )
+        if h["status"] == "Unknown":
+            print(f"\nUnable to assess completion: {h['path']}")
+        elif h["status"] != "Complete":
+            if h["title"] == "[untitled - needs completion]":
+                print(f"\nUnfilled scaffold: {h['path']}")
+                print(
+                    "If this is an unused scaffold that will not be completed, remove only that file: "
+                    f'rm "{h["path"]}"'
+                )
+            else:
+                print(f"\nIncomplete handoff: {h['path']}")
+                print("Complete the remaining placeholders before handing it off.")
     return 0
 
 

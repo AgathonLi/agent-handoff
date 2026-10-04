@@ -1,341 +1,166 @@
 ---
 name: agent-handoff
-description: "Host-neutral session handoff documents for cross-agent development. Creates, validates, lists and freshness-checks handoff files that any coding agent can read - Claude Code, Codex, WorkBuddy, Hermes, Zcode, Cursor, OpenCode. Triggered when: (1) user requests handoff/context save/state save, (2) context window approaches capacity, (3) a task milestone completes, (4) a work session ends, (5) user says 'create handoff', 'save state', 'I need to pause', 'context is getting full', 'hand this to Codex', 'take this to another agent', (6) resuming with 'load handoff', 'resume from', 'continue where we left off'. Storage directory is configurable via --handoff-dir, HANDOFF_DIR or .handoffrc; defaults to the host-neutral .handoff/ directory rather than any single client's config namespace."
+description: "Create, locate, validate and freshness-check host-neutral session handoffs. Use for 'create handoff', 'save state', 'I need to pause', 'context is getting full', 'hand this to Codex' or another agent, 'load handoff', 'resume from' and 'continue where we left off'. Create only for requested handoffs or meaningful work at a pause, transfer or imminent context-loss boundary; locating or resuming does not create a new document."
 agent_created: true
 ---
 
 # Agent handoff
 
-Creates handoff documents that let a fresh agent continue work with no
-ambiguity, and keeps those documents readable by every agent in the rotation
-rather than only the one that wrote them.
+Create short, host-neutral Markdown snapshots so another agent can continue.
+Requires Python 3.10+, no third-party dependencies. Handoffs are snapshots, not
+project state authorities, task managers or authorization grants.
 
-## Why the directory is host-neutral
+## When to use
 
-A handoff document has exactly one job: be found and read by whoever picks the
-work up next. Storing it inside a single client's configuration namespace
-(`.claude/`, `.workbuddy/`, `.cursor/`) defeats that job — the other agents never
-look there. This skill therefore defaults to `.handoff/` at the project root,
-which belongs to the project rather than to any client.
+- The user requests a handoff, save state, pause or transfer to another agent.
+- Context is about to be lost and meaningful work needs to continue.
+- A session genuinely ends with unfinished work or new context a successor needs.
+- Resume or locate a previous handoff, or validate an existing document.
 
-Do not "fix" a wrong path by swapping one client namespace for another. If the
-path needs to change, change it through the resolution chain below.
+Do not automatically create one for a read-only query, every small milestone,
+or every message ending. Continuous work by the same agent does not need a new
+handoff at each test, commit or push. Existing project rules and explicit user
+requests take precedence; do not silently rewrite their handoff policy.
 
 ## Directory resolution
 
-The handoff directory is resolved by `scripts/handoff_paths.py`. First match
-wins; every level works independently of the ones above it.
+All directory decisions go through `scripts/handoff_paths.py`, first match wins:
 
-| Level | Source | Notes |
-|-------|--------|-------|
-| 1 | `--handoff-dir <path>` | Highest priority. Relative paths resolve against the project root |
-| 2 | `HANDOFF_DIR` env var | For session-wide or host-level injection |
-| 3 | `.handoffrc` at project root | Per-project, travels with the repository |
-| 4 | An existing known layout | Preserves established conventions, migrates nothing |
-| 5 | `<project root>/.handoff/` | Host-neutral default |
+1. `--handoff-dir <path>` (relative paths resolve against the project root).
+2. `HANDOFF_DIR` environment variable.
+3. Project-root `.handoffrc`: bare path, or `handoff_dir = docs/handoffs`.
+4. Existing `.handoff/`, `.agent/handoffs/`, `.workbuddy/handoffs/`,
+   `.claude/handoffs/`, `thoughts/shared/handoffs/`, in that order.
+5. `<project root>/.handoff/`, the host-neutral default.
 
-Level 4 probes these layouts in order and adopts the first one that already
-exists: `.handoff/`, `.agent/handoffs/`, `.workbuddy/handoffs/`,
-`.claude/handoffs/`, `thoughts/shared/handoffs/`. A project already using one of
-them keeps using it; no files are moved.
+Each script reports the winning level. Existing layouts are adopted, never
+migrated automatically. Do not swap one client's namespace for another.
+Project-root detection walks upward for `.git`, `.handoffrc`, `AGENTS.md`,
+`CLAUDE.md`, `package.json`, `pyproject.toml` and similar markers. Creation fails
+with exit 2 when no root can be detected; it must never silently write into cwd.
+Run from the target project, or pass `--project-root` explicitly.
 
-`.handoffrc` accepts either form:
+## Intent and commands
 
-```
-.handoff
-```
-
-```
-handoff_dir = docs/handoffs
-```
-
-Every script prints which level decided the outcome. Read that line before
-assuming a path is wrong.
-
-## Project root detection
-
-Scripts locate the project root by walking upward from the current directory
-looking for `.git`, `.handoffrc`, `AGENTS.md`, `CLAUDE.md`, `package.json`,
-`pyproject.toml` or similar markers.
-
-If no marker is found, the scripts **fail with an error** instead of writing into
-the current directory. Silent fallback to the working directory is what causes
-handoff files to appear inside unrelated directories — including inside this
-skill's own directory when a script is run from there. Use `--project-root` or
-`--handoff-dir` to resolve such a failure.
-
-## Call intent
-
-The skill is invoked with a natural-language intent, not with script argv. Text
-placed in the host's skill `args` is **not** forwarded to the scripts: `--help`,
-`--dir` and a sentence of instructions are all ignored there, and the agent then
-has to guess which script to run. Pick the script from the intent instead.
-
-| Intent | When | Script |
-|--------|------|--------|
-| `read-only locate` | Find the latest handoff and judge whether it is still usable. Do not create one | `list_handoffs.py` |
-| `create` | A session is ending, a milestone completes, or context must be saved | `create_handoff.py` |
-| `resume` | Continue work another agent left behind | `list_handoffs.py`, then read the file it names |
-| `validate` | Check a handoff that already exists | `validate_handoff.py` |
-
-There is no `--dir`. The only directory override is `--handoff-dir`, and it is a
-script flag, passed on the script command line — never through skill `args`.
-`--help` on a script prints that script's usage; it is not a skill-level command.
-
-Two shapes that come up in practice:
-
-Read-only locate, when the request is "list and read the latest handoff, do not
-create one":
+Skill invocation is natural-language intent, not script argv. Skill `args` are
+not forwarded to scripts; there is no `--dir` flag. Pick the script, then pass
+flags on its command line. Use the host's terminal tool to execute:
 
 ```bash
-python scripts/list_handoffs.py
-```
-
-Stop after reading the file it reports. Do not run `create_handoff.py`.
-
-Abandoning a scaffold. If step 2 below is not going to happen, delete the file
-in the same turn. An unfilled scaffold stays in the listing as
-`[untitled - needs completion]` until someone removes it by hand:
-
-```bash
-rm <handoff-file>
-```
-
-`list_handoffs.py` prints that removal hint for any handoff it marks
-`Needs work`. It never deletes a file itself.
-
-## Document kinds
-
-Plans, task books and reviews use the **same** scaffold as a session handoff.
-Do not add a `--kind` flag and do not relax the required sections for them.
-
-`Important Context` and `Immediate Next Steps` are what the next reader needs
-regardless of document type. For a plan, write what the document is and what the
-first action is; for a review, write the conclusion and what should happen next.
-A document that cannot fill those two sections is not ready to hand off.
-
-## CREATE workflow
-
-### Step 1: generate the scaffold
-
-```bash
-python scripts/create_handoff.py [slug]
-python scripts/create_handoff.py implementing-auth
-python scripts/create_handoff.py auth-part-2 --continues-from 2026-09-18-auth.md
-python scripts/create_handoff.py my-task --handoff-dir docs/handoffs
-```
-
-The script resolves the directory, reports the precedence level used, pre-fills
-timestamp, project path, git branch, recent commits and modified files, then
-leaves `[TODO: ...]` markers for everything only the outgoing agent knows.
-
-### Step 2: complete the document
-
-Fill in every `[TODO: ...]` marker. Prioritize in this order:
-
-1. **Important Context** — what the next agent MUST know
-2. **Immediate Next Steps** — concrete, actionable first moves
-3. **Current State Summary** — where things stand right now
-4. **Decisions Made** — choices *with rationale*, not just outcomes
-
-Rationale matters more than outcome. Without the reasoning, the next agent
-re-litigates settled decisions or repeats a rejected approach.
-
-### Step 3: validate
-
-```bash
-python scripts/validate_handoff.py <handoff-file>
-python scripts/validate_handoff.py <handoff-file> --json
-```
-
-Checks: no remaining TODOs, required sections present and substantive, no
-credentials, referenced files resolve, quality score 0-100.
-
-Do not finalize a handoff with secrets detected or a score below 70.
-
-#### Paths outside the project trip the file-reference check
-
-The file-reference check resolves every backtick-quoted path against the project
-root. A path that lives outside the project — a language runtime, a sibling
-repository, an installed skill copy — therefore reports as "not found" and costs
-score, even though nothing is wrong.
-
-Describe such locations in prose and point at wherever the project already
-records machine-specific paths, rather than quoting the path itself:
-
-```markdown
-Python 3.13.12 (managed; path recorded in `AGENTS.md`)
-```
-
-Not:
-
-```markdown
-Python 3.13.12 at `.workbuddy/binaries/python/versions/3.13.12/python.exe`
-```
-
-If the pointer is to another file, confirm that file actually carries the path.
-A handoff that defers to `AGENTS.md` for a path `AGENTS.md` never recorded is a
-dangling pointer that validation cannot catch.
-
-#### A path that does not exist yet
-
-The same check cannot tell a wrong path from a path the plan has not created
-yet, so an unmarked missing reference is always treated as wrong and costs
-score.
-
-When the file is genuinely planned and not yet written, end the backtick-quoted
-reference with ` (planned)`:
-
-```markdown
-Next session creates `src/auth/session.py` `(planned)`.
-```
-
-The marker must be a separate backtick span immediately after the path. A
-`(planned)` written outside backticks, or attached to a different reference, does
-not count. Validation skips a marked reference and does not deduct for it.
-Remove the marker once the file exists — a marked reference is not verified.
-
-### Step 4: confirm
-
-Report the file location, score, any warnings, and the first action item for the
-next session.
-
-Then stage the handoff. A validated file that was never `git add`ed has no
-history behind it: the one observed loss was an uncommitted handoff, while every
-previously committed handoff in that directory came back with `git restore`.
-
-```bash
-git add <handoff-file>
-```
-
-Staging is required. Committing is not — do not commit unreviewed content just
-because validation passed. Pushing is a separate decision, and on a public
-remote it needs the owner's explicit confirmation. Staging does not protect
-against a working tree being deleted; it is the cheapest step that makes the
-file recoverable.
-
-## RESUME workflow
-
-### Step 1: find handoffs
-
-```bash
-python scripts/list_handoffs.py
+# Locate/read only: default shows newest 5; creates nothing
 python scripts/list_handoffs.py --project-root /path/to/project
-```
+python scripts/list_handoffs.py --limit 1
+python scripts/list_handoffs.py --all
 
-The listing reports a `Freshness` line for the **most recent** handoff only,
-using the same assessment as `check_staleness.py`. If that assessment fails the
-line reads `unknown` and the listing still succeeds. Older handoffs are not
-assessed here.
+# Create only when there is a real transfer boundary
+python scripts/create_handoff.py my-task
+python scripts/create_handoff.py next-stage --continues-from previous.md
 
-### Step 2: check freshness
+# Validate a completed document
+python scripts/validate_handoff.py <handoff-file>
 
-Read the `Freshness` line from step 1. Run the full check only when that line is
-`unknown`, or when the handoff you are resuming is not the most recent one:
-
-```bash
+# Check an older document, or when listing reports unknown freshness
 python scripts/check_staleness.py <handoff-file>
 ```
 
-Levels: `FRESH` (resume safely), `SLIGHTLY_STALE` (review first), `STALE`
-(verify carefully), `VERY_STALE` (create a fresh handoff instead).
+All scripts accept `--handoff-dir` and `--project-root`; list, validate and
+check also accept `--json`. List JSON reports total `count`, `shown_count`,
+`hidden_count` and only the selected `handoffs`; use `--all` for a full inventory.
 
-Git history is the strongest signal. For projects without version control the
-check falls back to file modification times rather than giving up, and the report
-names which signal was used.
+## Create
 
-### Step 3: read the document fully
+1. Generate the compact scaffold: metadata, lineage and three core sections.
+2. Replace the title and all TODOs. Each required section needs at least 50
+   substantive characters:
+   - **Current State Summary**: verified outcome, unfinished work, relevant
+     changes and evidence pointers. Distinguish local, committed and deployed.
+   - **Important Context**: authorization boundaries, blockers, new decisions
+     with rationale and assumptions that need verification.
+   - **Immediate Next Steps**: the first concrete action, prerequisites and
+     verification. If nothing remains, say so rather than inventing tasks.
+3. Add optional sections only when they carry useful new information. Link
+   stable architecture, contracts and environment notes in project documents;
+   do not repeat them or fill irrelevant sections just to earn points.
+4. Before validating, re-check **pending work, blockers and first action**
+   against the current fact source or evidence. Remove resolved items; do not
+   copy yesterday's todo list. Observations and unverified assumptions differ.
+5. Validate once after completing the document, again only if it changes.
+   Required sections must pass, the scaffold title must be replaced, no TODOs
+   or detected credentials may remain, and score must be at least 70.
+   A three-section document normally scores 88;
+   100 is not a goal. Scores are structural/static signals, not factual proof.
+6. Report the path, score, warnings and next action. Save according to project
+   policy: Git-tracked handoffs may be staged precisely when permitted; ignored
+   handoffs must not be force-added. No automatic commit or push. Staging is
+   not a backup or proof of cross-device delivery. Respect existing approved
+   local/sync policies; do not invent a new backup workflow.
 
-Read the whole handoff before acting. If it has a "Continues from" link, read the
-linked predecessor too.
+If an unused scaffold will not be completed, remove only that newly created
+file in the same turn, subject to the user's write policy. Listing reports
+incomplete documents; only untitled scaffolds get conditional removal hints.
+Titled drafts get a completion reminder. Listing never deletes anything itself.
 
-### Step 4: verify context
+Plans and reviews do not need a new document kind or special validator. Keep
+formal plans/reviews in their established project home; handoffs point to them.
 
-Follow [references/resume-checklist.md](references/resume-checklist.md): confirm
-the project directory and branch, check whether blockers were resolved, validate
-that assumptions still hold, review modified files for conflicts.
+## Resume
 
-### Step 5: begin work
+1. List recent handoffs and choose the **latest relevant** one, not blindly the
+   newest file from an unrelated task. Listing checks freshness of the newest
+   file only; run the separate check for another file or an unknown result.
+2. Read the selected handoff fully. A `Continues from` link is lineage: follow
+   it only for missing rationale, unresolved ambiguity or historical evidence.
+   Do not automatically load the entire chain.
+3. Verify the project/branch and the next action's prerequisites. Follow the
+   task-relevant parts of [resume-checklist.md](references/resume-checklist.md).
+   Current observed state and designated fact sources override old snapshots;
+   conflicting sources must be surfaced before state-changing work.
+4. Begin the first still-valid action under current user authorization. A stale
+   document alone is not a reason to write a replacement before doing work.
 
-Start at "Immediate Next Steps" item 1. Consult "Critical Files", "Key Patterns
-Discovered" and "Potential Gotchas" as you go.
+`FRESH` means no obvious stale signals were found, not that the text is correct
+or execution is safe. Git checks use history; non-Git checks use modification
+times, skip generated `outputs/`, `tmp/`, dependencies and client state, and
+report scan truncation. Those skipped artifacts may still matter to a task;
+verify the cited evidence directly. Freshness does not inspect live services.
 
-## Section heading levels
+## History and project pointers
 
-**Required and recommended section headings must be level 1, 2 or 3** — `#`,
-`##` or `###`. Level 2 (`##`) is what the generated scaffold uses; keep it.
+Keep history in place by default. File accumulation is not itself a runtime
+fault. Default listing limits output, not retention. Do not add automatic
+archive/delete jobs, telemetry, indexes or lifecycle databases.
+Only propose manual archival for completed work whose lasting decisions are
+already in the fact source and whose history no active handoff depends on.
+Moving files requires approval and link checks; list reads top-level `*.md` only.
 
-For sub-headings *inside* a section, use level 4 (`####`) or deeper. Any heading
-at level 1-3 terminates the preceding section, so a level-3 sub-heading would cut
-its parent section short and the parent could then fail the 50-character minimum
-content check.
-
-Required sections, each needing at least 50 characters of real content:
-`Current State Summary`, `Important Context`, `Immediate Next Steps`.
-
-## Handoff chaining
-
-For long-running work, chain handoffs to preserve lineage:
-
-```
-handoff-1.md
-    ↓  --continues-from handoff-1.md
-handoff-2.md
-    ↓  --continues-from handoff-2.md
-handoff-3.md
-```
-
-Read the most recent first, then walk back as needed.
-
-## Cross-agent use
-
-The point of the neutral directory is that handoffs survive an agent switch. To
-make them easy to find, add a line to the project's `AGENTS.md`:
+Suggested project `AGENTS.md` pointer (adapt to its existing policy):
 
 ```markdown
 ## Handoffs
 
-Session handoff documents live in `.handoff/`. Read the most recent one before
-starting work; write a new one before finishing.
+Snapshots live in `.handoff/`, not the project state authority. Read the latest
+relevant handoff when resuming. Write a short one when pausing or transferring
+meaningful work; follow project storage/Git policy. Verify pending items first.
 ```
 
-`AGENTS.md` is read natively by Codex and OpenCode, and by Claude Code when
-pointed at it. That one line plus a neutral directory is what makes the handoff
-actually reachable from another agent.
+Update an existing index or memory pointer only when it would otherwise become
+wrong. Do not duplicate current state and pending work into several documents.
 
-When finishing a session, update that pointer if the project keeps a handoff
-index or a working-memory note and either one now disagrees with the new file.
-Update the pointer only. Do not copy the handoff body into a second document —
-the same fact kept in two places drifts.
+## Formatting and limitations
 
-## Resources
+Section headings use levels 1–3; subheadings within sections use level 4+.
+Outside fenced code, higher-level subheadings terminate the parent and can fail
+its content minimum. Headings and comments inside code fences are not sections.
+For genuinely future files, use `src/auth.py` `(planned)` (two separate backtick
+spans). Remove the exemption when the file exists. External runtime paths can
+produce false missing-reference warnings; prefer an accurate project-doc pointer.
+A validator checks limited patterns, not all secrets or all references; its score
+cannot verify authority, live state, semantic consistency or completeness.
 
-### scripts/
+## Development resources
 
-| Script | Purpose |
-|--------|---------|
-| `handoff_paths.py` | Shared directory and project root resolution. Imported by the others; not run directly |
-| `create_handoff.py [slug] [--continues-from F] [--handoff-dir D] [--project-root R]` | Generate a scaffolded handoff |
-| `list_handoffs.py [--handoff-dir D] [--project-root R] [--json]` | List available handoffs. Reports freshness for the newest one and a removal hint for unfilled scaffolds |
-| `validate_handoff.py <file> [--project-root R] [--json]` | Check completeness, quality and secrets |
-| `check_staleness.py <file> [--project-root R] [--json]` | Assess whether context is still current |
-
-All scripts accept `--handoff-dir` and `--project-root`. Validation and
-staleness also accept `--json` for programmatic use.
-
-`sync_to_host.py` exists only in the development repository and is not part of an
-installed copy. It pushes the repository to the host skill directories and
-deliberately withholds `AGENTS.md`, `tests/`, `.github/` and host-written local
-directories such as `.handoff/` and `.workbuddy/`. `AGENTS.md` is a project-root
-marker, so copying it into an installed skill directory would make that
-directory look like a project root and send handoff files there instead of
-raising an error.
-
-The payload is constrained by an allowlist test rather than only by the
-exclusion set, so a newly added local directory fails the suite instead of
-silently shipping to every installed copy.
-
-### references/
-
-- [handoff-template.md](references/handoff-template.md) — full template with guidance
-- [resume-checklist.md](references/resume-checklist.md) — verification checklist for resuming agents
+- [handoff-template.md](references/handoff-template.md): compact authoring guide.
+- [resume-checklist.md](references/resume-checklist.md): proportional verification.
+- `scripts/sync_to_host.py` is development-only, one-way source → installed copy.
+  It excludes root markers, tests, reviews and local state; preserve host metadata.
+  Installed copies are not an alternative source of truth.

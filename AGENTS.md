@@ -13,7 +13,9 @@
 ## Handoffs 与评审存档
 
 - 会话交接档案在 `.handoff/`（宿主中立，本仓无 `.handoffrc`，解析实测
-  `Resolved via: existing directory (.handoff)`）。开工读最新一份，收工写一份新的。
+  `Resolved via: existing directory (.handoff)`）。恢复时读最新相关一份，前序按需回溯；
+  真正暂停、移交或上下文即将丢失时写简短新档案，不为小里程碑或只读查询自动新建。
+  交接是时点快照，待办先对照项目事实源复核；保存遵循本仓既有政策，不强制暂存。
 - 使用回顾与评估文档在 `reviews/`，只留在本机。本仓是 public，这类文档点名
   其他项目，**不要提交**。目录已在 `.gitignore`；同时在 `sync_to_host.py` 的
   `EXCLUDED_NAMES` 中登记，安装副本也不会带上它。

@@ -1,153 +1,62 @@
-# Handoff template
+# Compact handoff template
 
-Reference structure for handoff documents. `create_handoff.py` pre-fills the
-metadata sections; you complete the rest.
+`create_handoff.py` generates metadata, lineage and three required sections.
+Each required section needs at least 50 substantive characters. Fill them with
+information the successor needs, not prose to satisfy a score.
 
-## Heading level rules
-
-- Section headings: level 1, 2 or 3 (`#`, `##`, `###`). The scaffold uses `##`.
-- Sub-headings inside a section: level 4 (`####`) or deeper.
-
-A heading at level 1-3 terminates the preceding section. Using `###` for a
-sub-heading cuts its parent section short, which can push the parent below the
-50-character minimum and fail validation.
-
-## Required sections
-
-Each needs at least 50 characters of substantive content:
-
-- `Current State Summary`
-- `Important Context`
-- `Immediate Next Steps`
-
-## Recommended sections
-
-Each absent section costs 2 points on the quality score:
-
-- `Architecture Overview`
-- `Critical Files`
-- `Files Modified`
-- `Decisions Made`
-- `Assumptions Made`
-- `Potential Gotchas`
-
----
-
-# Handoff: [TASK_TITLE]
+```markdown
+# Handoff: <task and transfer boundary>
 
 ## Session Metadata
 
-- Created: [TIMESTAMP]
-- Project: [PROJECT_PATH]
-- Branch: [GIT_BRANCH]
-- Session duration: [APPROX_DURATION]
-
-Recent commits for context:
-
-  - [commit line]
+- Created: <YYYY-MM-DD HH:MM:SS>
+- Project: <project path>
+- Branch: <branch or non-Git>
 
 ## Handoff Chain
 
-- **Continues from**: None (fresh start)
-- **Supersedes**: None
+- Continues from: <link or None; lineage only, read on demand>
 
 ## Current State Summary
 
-One paragraph: what was being worked on, current status, where things left off.
-Be concrete. "Refactoring the auth module" is not useful; "Extracted token
-validation into `auth/tokens.py`; the refresh path still calls the old helper and
-needs migrating" is.
-
-## Architecture Overview
-
-Structural insights discovered this session — main components, data flow, module
-boundaries. Record what took effort to figure out, not what is obvious from the
-directory listing.
-
-## Critical Files
-
-| File | Purpose | Relevance |
-|------|---------|-----------|
-| path/to/file | What it does | Why it matters for this task |
-
-## Key Patterns Discovered
-
-Conventions and idioms the next agent should follow. Include the ones that are
-not self-evident — error handling style, naming rules, test layout, places where
-the codebase deliberately deviates from convention.
-
-## Tasks Finished
-
-- [x] Task 1 — what was done
-- [x] Task 2 — what was done
-
-## Files Modified
-
-| File | Changes | Rationale |
-|------|---------|-----------|
-| path/to/file | What changed | Why |
-
-## Decisions Made
-
-| Decision | Options Considered | Rationale |
-|----------|-------------------|-----------|
-| Chose X over Y | X, Y, Z | Why X won |
-
-Record rejected options and the reason for rejection. Without them the next
-agent re-proposes the same wrong approach.
-
-## Immediate Next Steps
-
-1. Most critical next action — specific enough to start immediately
-2. Second priority
-3. Third priority
-
-## Blockers and Open Questions
-
-- [ ] Blocker: [description] — needs: [what unblocks it]
-- [ ] Question: [unclear point] — suggested: [possible resolution]
-
-## Deferred Items
-
-- Item (deferred because: [reason])
+Verified outcome and unfinished work, with evidence pointers. Distinguish local,
+committed and deployed status. List relevant changes here or link an existing
+report; do not recreate the whole project history.
 
 ## Important Context
 
-The most important section. Critical information the next agent MUST know:
-non-obvious constraints, things that look broken but are intentional, approaches
-already tried and abandoned, user preferences established this session.
+Authorization boundaries, active blockers, new decisions and their rationale.
+Point at stable architecture/contracts. Mark assumptions and how to verify them.
 
-Write this as if the reader has no access to the conversation. They do not.
+## Immediate Next Steps
 
-## Assumptions Made
+First concrete action, its prerequisites and verification. Confirm it is still
+pending. If there is no remaining work, say so and do not invent a task list.
+```
 
-- Assumption: [what was taken as true] — verify by: [how to confirm]
+## Optional sections
 
-## Potential Gotchas
+Add `Critical Files`, `Decisions Made`, `Files Modified`, `Potential Gotchas`,
+`Assumptions Made` or `Architecture Overview` only when they add needed context.
+Their absence costs 2 points each under the existing scoring scheme; a complete
+three-section handoff normally scores 88 and is acceptable. Do not pursue 100.
+Legacy long handoffs remain supported; no migration is necessary.
 
-- Edge cases, quirks, non-obvious behaviour that could trip up a new agent
+## Before finalizing
 
-## Environment State
+- Re-check pending work, blockers and the first action against current evidence.
+- Keep sustained state in the project's fact source, not in several snapshots.
+- Replace the title and all TODOs. Validate once; rerun only after editing.
+  Required checks pass, no detected credentials, score at least 70. This does
+  not prove factual accuracy.
+- Follow project storage/Git policy; do not force-add ignored handoffs, commit
+  automatically or infer that staging delivers the file to another device.
 
-Tools and services in use, any running processes or dev servers, and the NAMES of
-relevant environment variables.
+## Formatting
 
-Never record variable values. The validator scans for credentials and will block
-the handoff.
-
-## Related Resources
-
-- Relevant documentation
-- Related file paths
-- External resources consulted
-
----
-
-## Usage notes
-
-1. Be specific. Vague descriptions do not help the next agent.
-2. Include line numbers where useful: `src/auth.ts:142`.
-3. Prioritize `Important Context` and `Immediate Next Steps`.
-4. Never include secrets — keys, passwords, tokens, connection strings.
-5. Record WHY alongside WHAT. Rationale is the part that cannot be recovered
-   from reading the diff.
+Section headings are levels 1–3; subheadings inside sections are level 4+.
+Headings and comments inside fenced code do not define document sections.
+For a file that genuinely does not yet exist, write `src/auth.py` `(planned)`
+(two separate backtick spans). Remove the exemption after creation.
+Never include secrets or actual credential values. Detection covers limited
+patterns, so a clean validator result is not a guarantee of safe disclosure.
