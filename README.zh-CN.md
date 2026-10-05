@@ -2,6 +2,10 @@
    <a href="./README.md">EN</a> | <strong>简</strong>
 </p>
 
+<p align="center">
+  <img src="./assets/logo.svg" alt="agent-handoff logo" width="96" height="96">
+</p>
+
 # agent-handoff
 
 [![tests](https://github.com/AgathonLi/agent-handoff/actions/workflows/test.yml/badge.svg)](https://github.com/AgathonLi/agent-handoff/actions/workflows/test.yml)

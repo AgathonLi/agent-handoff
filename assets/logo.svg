@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-labelledby="title">
+  <title id="title">agent-handoff</title>
+  <style>
+    .ink { stroke: #17181A; }
+    @media (prefers-color-scheme: dark) { .ink { stroke: #F1EFEA; } }
+  </style>
+  <g transform="translate(0.75 1)">
+    <circle cx="14" cy="45" r="7" fill="#F0641E"/>
+    <path class="ink" d="M30.5 10 V52 M30.5 35 Q30.5 25 40.5 25 H42 Q52 25 52 35 V52" fill="none" stroke-width="7" stroke-linejoin="round"/>
+  </g>
+</svg>
