@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <img src="./assets/logo.svg" alt="agent-handoff logo" width="96" height="96">
+  <img src="https://raw.githubusercontent.com/AgathonLi/agent-handoff/main/assets/logo.svg" alt="agent-handoff logo" width="96" height="96">
 </p>
 
 # agent-handoff
@@ -245,19 +245,24 @@ No third-party dependencies. CI runs the suite on Linux, Windows and macOS
 against Python 3.10 and 3.13.
 
 If you develop in a clone and also keep installed copies under
-`~/.workbuddy/skills/`, `~/.claude/skills/` or `~/.agents/skills/`, push changes
-outward with:
+`~/.workbuddy/skills/`, `~/.claude/skills/`, `~/.agents/skills/`,
+`~/.zcode/skills/` or `~/.codex/skills/`, push changes outward with:
 
 ```bash
 python scripts/sync_to_host.py            # dry run
 python scripts/sync_to_host.py --apply
 ```
 
+By default, only existing install directories are used. Aliases that resolve to
+the same directory are synced once.
+
 The sync is one-way and withholds `AGENTS.md`, `tests/`, `.github/`, itself, and
-host-written local directories such as `.handoff/` and `.workbuddy/`. Withholding
-`AGENTS.md` is a correctness requirement rather than housekeeping: it is a
-project-root marker, so an installed copy containing it would register as a
-project root and receive handoff files instead of raising an error.
+host-written local state such as `.handoff/`, `.workbuddy/` and `.zcodeignore`.
+README artwork is loaded from GitHub rather than copied, so displaying the logo
+requires an internet connection. Withholding `AGENTS.md` is a correctness
+requirement rather than housekeeping: it is a project-root marker, so an installed
+copy containing it would register as a project root and receive handoff files
+instead of raising an error.
 
 The payload is also constrained by an allowlist test rather than by the exclusion
 set alone, so a newly added local directory fails the suite instead of silently

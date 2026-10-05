@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <img src="./assets/logo.svg" alt="agent-handoff logo" width="96" height="96">
+  <img src="https://raw.githubusercontent.com/AgathonLi/agent-handoff/main/assets/logo.svg" alt="agent-handoff logo" width="96" height="96">
 </p>
 
 # agent-handoff
@@ -222,18 +222,22 @@ python tests/test_agent_handoff.py
 无第三方依赖。CI 在 Linux、Windows 和 macOS 上针对 Python 3.10 与 3.13 运行整个
 测试套件。
 
-如果你在克隆仓库里开发，同时在 `~/.workbuddy/skills/`、`~/.claude/skills/` 或
-`~/.agents/skills/` 下保留安装副本，用下面的命令把改动推出去：
+如果你在克隆仓库里开发，同时在 `~/.workbuddy/skills/`、`~/.claude/skills/`、
+`~/.agents/skills/`、`~/.zcode/skills/` 或 `~/.codex/skills/` 下保留安装副本，
+用下面的命令把改动推出去：
 
 ```bash
 python scripts/sync_to_host.py            # 预演
 python scripts/sync_to_host.py --apply
 ```
 
+默认只同步已存在的安装目录；多个路径指向同一实际目录时，只同步一次。
+
 同步是单向的，载荷排除 `AGENTS.md`、`tests/`、`.github/`、脚本自身，以及
-`.handoff/`、`.workbuddy/` 这类宿主写入的本地目录。排除 `AGENTS.md` 是正确性要求
-而非整洁性偏好：它是项目根标志，安装副本里若含有它，该副本就会被识别为项目根并
-接收交接文件，而不是正确报错。
+`.handoff/`、`.workbuddy/`、`.zcodeignore` 这类宿主写入的本地状态。README 的图片
+从 GitHub 加载，不复制到安装目录，因此显示 logo 需要联网。排除 `AGENTS.md` 是
+正确性要求而非整洁性偏好：它是项目根标志，安装副本里若含有它，该副本就会被识别
+为项目根并接收交接文件，而不是正确报错。
 
 同步载荷还受一项白名单测试约束，而不只依赖排除列表。因此新增的本地目录会让测试
 失败，而不是悄无声息地进入每一份安装副本。

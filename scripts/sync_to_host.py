@@ -44,6 +44,8 @@ DEFAULT_TARGETS = [
     Path.home() / ".workbuddy" / "skills" / "agent-handoff",
     Path.home() / ".claude" / "skills" / "agent-handoff",
     Path.home() / ".agents" / "skills" / "agent-handoff",
+    Path.home() / ".zcode" / "skills" / "agent-handoff",
+    Path.home() / ".codex" / "skills" / "agent-handoff",
 ]
 
 # Files and directories that belong to development only and must never reach an
@@ -54,10 +56,10 @@ EXCLUDED_NAMES = {
     ".gitattributes",
     ".handoff",
     ".workbuddy",
+    ".zcodeignore",
     "__pycache__",
     "AGENTS.md",
-    # Logo and other README artwork. Rendered by the repository page only;
-    # nothing at runtime reads it.
+    # README artwork is loaded from GitHub rather than installed locally.
     "assets",
     # Usage reviews and other write-ups about this skill. Development output,
     # not something an installed copy needs at runtime; the allowlist test in
@@ -239,7 +241,13 @@ def verify(payload: dict[str, Path], target: Path) -> list[str]:
 def resolve_targets(explicit: str | None) -> list[Path]:
     if explicit:
         return [Path(explicit).expanduser().resolve()]
-    return [t for t in DEFAULT_TARGETS if t.exists()]
+    targets = []
+    for candidate in DEFAULT_TARGETS:
+        if candidate.is_dir():
+            target = candidate.resolve()
+            if target not in targets:
+                targets.append(target)
+    return targets
 
 
 def main() -> int:

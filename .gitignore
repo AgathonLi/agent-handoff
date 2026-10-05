@@ -24,8 +24,9 @@ _skillhub_meta.json
 # Handoffs produced while dogfooding this repo on itself.
 .handoff/
 
-# Host-written session memory for this workspace. Local context, not source.
+# Host-written workspace state and configuration, not part of the source.
 .workbuddy/
+.zcodeignore
 
 # Usage reviews. Local development notes about other projects; this
 # repository is public, so they must not be committed.

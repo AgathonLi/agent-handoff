@@ -768,6 +768,19 @@ class TestHostSync(unittest.TestCase):
         self.assertNotIn("scripts/sync_to_host.py", payload)
         self.assertNotIn(".gitattributes", payload)
 
+    def test_excludes_local_zcodeignore_without_deleting_it(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            local_config = root / ".zcodeignore"
+            local_config.write_text("local-host-rules\n", encoding="utf-8")
+            (root / "SKILL.md").write_text("# test skill\n", encoding="utf-8")
+
+            payload = sync_to_host.collect_payload(root)
+            self.assertEqual(set(payload), {"SKILL.md"})
+            self.assertEqual(
+                local_config.read_text(encoding="utf-8"), "local-host-rules\n"
+            )
+
     def test_payload_is_an_allowlist_not_a_blocklist(self):
         """Any new top-level entry must be opted in, never opted out.
 
@@ -843,6 +856,87 @@ class TestHostSync(unittest.TestCase):
         ]
         for relative in required:
             self.assertIn(relative, payload, f"{relative} missing from sync payload")
+
+    def test_readme_logos_do_not_require_installed_assets(self):
+        from html.parser import HTMLParser
+
+        class LogoParser(HTMLParser):
+            def __init__(self):
+                super().__init__()
+                self.sources = []
+
+            def handle_starttag(self, tag, attrs):
+                attributes = dict(attrs)
+                if tag == "img" and attributes.get("alt") == "agent-handoff logo":
+                    self.sources.append(attributes.get("src"))
+
+        logo_url = (
+            "https://raw.githubusercontent.com/AgathonLi/agent-handoff/"
+            "main/assets/logo.svg"
+        )
+        for name in ("README.md", "README.zh-CN.md"):
+            with self.subTest(name=name):
+                parser = LogoParser()
+                parser.feed((REPO_ROOT / name).read_text(encoding="utf-8"))
+                self.assertEqual(parser.sources, [logo_url])
+        self.assertNotIn("assets/logo.svg", sync_to_host.collect_payload(REPO_ROOT))
+
+    def test_default_targets_include_zcode_and_codex(self):
+        expected = {
+            Path.home() / ".zcode" / "skills" / "agent-handoff",
+            Path.home() / ".codex" / "skills" / "agent-handoff",
+        }
+        self.assertTrue(expected <= set(sync_to_host.DEFAULT_TARGETS))
+
+    def test_default_targets_only_use_existing_directories(self):
+        from unittest.mock import patch
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            target = root / "installed"
+            target.mkdir()
+            missing = root / "missing"
+            regular_file = root / "not-a-directory"
+            regular_file.write_text("local file\n", encoding="utf-8")
+            with patch.object(
+                sync_to_host, "DEFAULT_TARGETS", [missing, target, regular_file]
+            ):
+                self.assertEqual(sync_to_host.resolve_targets(None), [target.resolve()])
+            self.assertFalse(missing.exists())
+
+    def test_default_targets_deduplicate_resolved_paths(self):
+        from unittest.mock import patch
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            target = root / "installed"
+            target.mkdir()
+            alias_parent = root / "aliases"
+            alias_parent.mkdir()
+            alias = alias_parent / ".." / "installed"
+            other = root / "other-installed"
+            other.mkdir()
+            with patch.object(
+                sync_to_host, "DEFAULT_TARGETS", [target, alias, other, target]
+            ):
+                self.assertEqual(
+                    sync_to_host.resolve_targets(None),
+                    [target.resolve(), other.resolve()],
+                )
+
+    def test_explicit_target_overrides_defaults_without_creating_it(self):
+        from unittest.mock import patch
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            default = root / "default-installed"
+            default.mkdir()
+            explicit = root / "explicit-installed"
+            with patch.object(sync_to_host, "DEFAULT_TARGETS", [default]):
+                self.assertEqual(
+                    sync_to_host.resolve_targets(str(explicit)), [explicit.resolve()]
+                )
+            self.assertFalse(explicit.exists())
 
     def test_dry_run_writes_nothing(self):
         with tempfile.TemporaryDirectory() as tmp:
